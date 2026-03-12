@@ -1,6 +1,8 @@
 import os
 import json
 import base64
+import uuid
+from datetime import datetime, timezone
 from cryptography.hazmat.primitives.asymmetric import rsa, padding
 from cryptography.hazmat.primitives import serialization, hashes
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
@@ -15,6 +17,8 @@ def generate_rsa_keypair():
     return private_key, public_key
 
 
+# Guarda a chave privada no disco local do cliente.
+# O servidor nunca deve ter acesso a este ficheiro.
 def save_private_key(private_key, path: str):
     pem = private_key.private_bytes(
         encoding=serialization.Encoding.PEM,
@@ -25,6 +29,7 @@ def save_private_key(private_key, path: str):
         f.write(pem)
 
 
+# Guarda a chave pública para que o utilizador a possa publicar no servidor.
 def save_public_key(public_key, path: str):
     pem = public_key.public_bytes(
         encoding=serialization.Encoding.PEM,
@@ -34,16 +39,19 @@ def save_public_key(public_key, path: str):
         f.write(pem)
 
 
+# Lê a chave privada local do utilizador.
 def load_private_key(path: str):
     with open(path, "rb") as f:
         return serialization.load_pem_private_key(f.read(), password=None)
 
 
+# Lê uma chave pública guardada em PEM.
 def load_public_key(path: str):
     with open(path, "rb") as f:
         return serialization.load_pem_public_key(f.read())
 
 
+# Converte a chave pública para texto PEM para a enviar pelo protocolo.
 def public_key_to_pem(public_key) -> str:
     return public_key.public_bytes(
         encoding=serialization.Encoding.PEM,
@@ -51,10 +59,14 @@ def public_key_to_pem(public_key) -> str:
     ).decode()
 
 
+# Reconstrói uma chave pública a partir de texto PEM.
 def public_key_from_pem(pem: str):
     return serialization.load_pem_public_key(pem.encode())
 
 
+# Cifra uma mensagem para um destinatário específico.
+# Gera uma chave AES aleatória para esta mensagem, cifra o texto com AES-GCM
+# e encapsula a chave AES com a chave pública RSA do destinatário.
 def encrypt_for_recipient(plaintext: str, recipient_public_key):
     aes_key = AESGCM.generate_key(bit_length=256)
     aesgcm = AESGCM(aes_key)
@@ -78,6 +90,7 @@ def encrypt_for_recipient(plaintext: str, recipient_public_key):
     }
 
 
+# Decifra uma mensagem recebida por este utilizador.
 def decrypt_from_sender(payload: dict, recipient_private_key) -> str:
     encrypted_key = base64.b64decode(payload["encrypted_key"])
     nonce = base64.b64decode(payload["nonce"])
@@ -97,6 +110,7 @@ def decrypt_from_sender(payload: dict, recipient_private_key) -> str:
     return plaintext.decode()
 
 
+# Assina dados com a chave privada do remetente.
 def sign_message(data: bytes, private_key) -> str:
     signature = private_key.sign(
         data,
@@ -109,6 +123,7 @@ def sign_message(data: bytes, private_key) -> str:
     return base64.b64encode(signature).decode()
 
 
+# Verifica a assinatura de um remetente.
 def verify_signature(data: bytes, signature_b64: str, public_key) -> bool:
     try:
         signature = base64.b64decode(signature_b64)
@@ -126,5 +141,16 @@ def verify_signature(data: bytes, signature_b64: str, public_key) -> bool:
         return False
 
 
+# Serializa um dicionário sempre da mesma maneira antes de assinar/verificar.
 def canonical_message_bytes(message_dict: dict) -> bytes:
-    return json.dumps(message_dict, sort_keys=True).encode()
+    return json.dumps(message_dict, sort_keys=True, separators=(",", ":")).encode()
+
+
+# Gera um identificador único para cada mensagem.
+def generate_message_id() -> str:
+    return str(uuid.uuid4())
+
+
+# Cria um timestamp UTC em formato ISO 8601.
+def utc_timestamp() -> str:
+    return datetime.now(timezone.utc).isoformat()

@@ -14,6 +14,8 @@ from crypto_utils import (
     sign_message,
     verify_signature,
     canonical_message_bytes,
+    generate_message_id,
+    utc_timestamp,
 )
 
 
@@ -21,6 +23,8 @@ HOST = "127.0.0.1"
 PORT = 9000
 
 
+# Garante que o utilizador tem par de chaves local.
+# As chaves privadas ficam apenas na pasta local do cliente.
 def ensure_keys(username: str):
     os.makedirs("keys", exist_ok=True)
     priv_path = f"keys/{username}_private.pem"
@@ -58,57 +62,90 @@ def get_user_key(sock, username):
     return public_key_from_pem(resp["public_key"])
 
 
+# Cria um envelope formal com os metadados necessários para a mensagem.
+def build_message_envelope(my_username, target, text, my_private_key, target_public_key):
+    payload = encrypt_for_recipient(text, target_public_key)
+
+    envelope_to_sign = {
+        "message_id": generate_message_id(),
+        "timestamp": utc_timestamp(),
+        "from": my_username,
+        "to": target,
+        "payload": payload,
+    }
+
+    signature = sign_message(canonical_message_bytes(envelope_to_sign), my_private_key)
+
+    return {
+        **envelope_to_sign,
+        "signature": signature,
+    }
+
+
 def send_message(sock, my_username, my_private_key, target, text):
     target_public_key = get_user_key(sock, target)
     if target_public_key is None:
         return
 
-    payload = encrypt_for_recipient(text, target_public_key)
-    envelope_to_sign = {
-        "from": my_username,
-        "to": target,
-        "payload": payload
-    }
-    signature = sign_message(canonical_message_bytes(envelope_to_sign), my_private_key)
+    envelope = build_message_envelope(my_username, target, text, my_private_key, target_public_key)
 
     send_json(sock, {
         "command": "send_message",
-        **envelope_to_sign,
-        "signature": signature
+        **envelope,
     })
-    print(recv_json(sock))
+
+    response = recv_json(sock)
+    if response and response.get("status") == "ok":
+        print(f"Mensagem enviada com sucesso. message_id={response.get('message_id')}")
+    else:
+        print(response)
+
+
+# Valida a assinatura do remetente e só depois tenta decifrar a mensagem.
+def display_verified_message(sock, msg, my_private_key):
+    sender = msg["from"]
+
+    sender_key = get_user_key(sock, sender)
+    if sender_key is None:
+        print(f"Não foi possível obter a chave pública de {sender}")
+        return
+
+    signed_part = {
+        "message_id": msg["message_id"],
+        "timestamp": msg["timestamp"],
+        "from": msg["from"],
+        "to": msg["to"],
+        "payload": msg["payload"],
+    }
+
+    valid = verify_signature(
+        canonical_message_bytes(signed_part),
+        msg["signature"],
+        sender_key
+    )
+
+    if not valid:
+        print(f"[AVISO] assinatura inválida de {sender} na mensagem {msg.get('message_id')}")
+        return
+
+    try:
+        plaintext = decrypt_from_sender(msg["payload"], my_private_key)
+        print(f"[{msg['timestamp']}] {sender} ({msg['message_id']}): {plaintext}")
+    except Exception as exc:
+        print(f"[AVISO] não foi possível decifrar a mensagem {msg.get('message_id')}: {exc}")
 
 
 def fetch_messages(sock, username, my_private_key):
     send_json(sock, {"command": "fetch_messages", "username": username})
     resp = recv_json(sock)
 
-    for msg in resp.get("messages", []):
-        sender = msg["from"]
+    messages = resp.get("messages", [])
+    if not messages:
+        print("Sem mensagens pendentes.")
+        return
 
-        sender_key = get_user_key(sock, sender)
-        if sender_key is None:
-            print(f"Não foi possível obter chave de {sender}")
-            continue
-
-        signed_part = {
-            "from": msg["from"],
-            "to": msg["to"],
-            "payload": msg["payload"]
-        }
-
-        valid = verify_signature(
-            canonical_message_bytes(signed_part),
-            msg["signature"],
-            sender_key
-        )
-
-        if not valid:
-            print(f"[AVISO] assinatura inválida de {sender}")
-            continue
-
-        plaintext = decrypt_from_sender(msg["payload"], my_private_key)
-        print(f"{sender}: {plaintext}")
+    for msg in messages:
+        display_verified_message(sock, msg, my_private_key)
 
 
 def main():
