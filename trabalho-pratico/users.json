@@ -1,0 +1,8 @@
+{
+  "simao": {
+    "public_key": "-----BEGIN PUBLIC KEY-----\nMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAtfGy0IknA/NpFJNn6kNk\n1EvBdgk5n1Ml/BzilbRV+PGP5Kc+Fo1/TYt9zQhp3iJqYNATbjuvubpljfOaoTbk\nu1i7cpbUaGZ/MnuC1NGreX4GFU+s9FK4YMq1Za+gBMMpOAhLkjQEUpUBJ1DIpjkG\n0w4Bd5sZeTJ6+mclIfuO6fz6E9S65UnXDbzxs8J1bUI82THsgStrsw699RRwofi4\nT0S76VpL25jh4E+qocULo8SnZhdddAdAnjsF9KJSXTXII2H+MIC6ymypPs53aLJE\nXlqbkjXSD9ZCK5ivVBbcIYHs5ROOsQ7oGpiMON7Zg/fnwe4iQZU6QBCnZtbdMzdg\n8QIDAQAB\n-----END PUBLIC KEY-----\n"
+  },
+  "goncalo": {
+    "public_key": "-----BEGIN PUBLIC KEY-----\nMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAuPeXsZY3pR7tDEWBbcLl\nA+pQw4yKspcHD4CBGz5lNJGNy5KcA+Fm431zwd9IE817E6rSvERSqiB1x5DJKpRM\nuGhBvFgXQaqssQvAvUK9QkMvOohkMTxb0uvPzlif4n28THmcw4WhEv8a56sQGiMB\npxH2uUiPrwjqqByU7wIn8qFgGtmuWd+3bs9D8Qapa1KAQbsl3oD7bqPG98qzxDyl\n5bYESoQJ7qaSMHWvnPC7m1Upn8vocyoUEs1SZnbilYsiLwac/j+JLdBJIur0Ck2M\nQo+Umn/44fm+izjmqJeGFdV81jfDWlLjyMsvXtqYQ1FB20rj8noIPkHuzSPhBqa3\nCwIDAQAB\n-----END PUBLIC KEY-----\n"
+  }
+}
