@@ -1,8 +1,8 @@
 # Repositório SSI 25/26
 
-- Nº Aluno 1 - Nome Aluno 1 (a preencher)
-- Nº Aluno 2 - Nome Aluno 2 (a preencher)
-- Nº Aluno 3 - Nome Aluno 3 (a preencher)
+- A106811 - Gonçalo Francisco Loureiro Silva
+- A107321 - José Simão Correia de Campos
+- A106908 - José Miguel Torrinha Paredes Pinho Sampaio
 
 ### Guiões Práticos
 
