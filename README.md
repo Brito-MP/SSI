@@ -1,8 +1,8 @@
 # Repositório SSI 25/26
 
 - A106811 - Gonçalo Francisco Loureiro Silva
+- A107378 - Henrique Moura Palma Brito
 - A107321 - José Simão Correia de Campos
-- A106908 - José Miguel Torrinha Paredes Pinho Sampaio
 
 ### Guiões Práticos
 
