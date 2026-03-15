@@ -1,5 +1,12 @@
 import socket
 import threading
+import sys
+from pathlib import Path
+
+ROOT_DIR = Path(__file__).resolve().parent.parent
+if str(ROOT_DIR) not in sys.path:
+    sys.path.insert(0, str(ROOT_DIR))
+
 from protocol import send_json, recv_json
 from storage import load_users, save_users, load_messages, save_messages
 
@@ -8,6 +15,7 @@ HOST = "127.0.0.1"
 PORT = 9000
 
 online_users = {}  # username -> socket
+online_users_lock = threading.Lock()
 
 REQUIRED_PAYLOAD_FIELDS = {"nonce", "ciphertext", "encrypted_key"}
 REQUIRED_ENVELOPE_FIELDS = {
@@ -63,6 +71,20 @@ def pop_pending_messages(username: str):
     return pending
 
 
+def sender_public_key(users: dict, sender: str):
+    return users.get(sender, {}).get("public_key")
+
+
+def enrich_with_sender_keys(messages, users: dict):
+    enriched = []
+    for msg in messages:
+        enriched.append({
+            **msg,
+            "sender_public_key": sender_public_key(users, msg["from"]),
+        })
+    return enriched
+
+
 def handle_client(conn, addr):
     username = None
     try:
@@ -80,7 +102,8 @@ def handle_client(conn, addr):
                     "public_key": msg["public_key"]
                 }
                 save_users(users)
-                online_users[username] = conn
+                with online_users_lock:
+                    online_users[username] = conn
                 send_json(conn, {"status": "ok", "message": f"user '{username}' registado"})
 
             elif command == "get_user_key":
@@ -111,11 +134,14 @@ def handle_client(conn, addr):
                     continue
 
                 envelope = store_encrypted_message(msg)
+                sender_pub_key = sender_public_key(users, msg["from"])
 
-                target_socket = online_users.get(msg["to"])
+                with online_users_lock:
+                    target_socket = online_users.get(msg["to"])
                 if target_socket:
                     send_json(target_socket, {
                         "command": "deliver_message",
+                        "sender_public_key": sender_pub_key,
                         **envelope
                     })
 
@@ -127,8 +153,19 @@ def handle_client(conn, addr):
                 })
 
             elif command == "fetch_messages":
-                username = msg["username"]
-                pending = pop_pending_messages(username)
+                requested_username = msg.get("username")
+
+                if username is not None and requested_username != username:
+                    send_json(conn, {"status": "error", "message": "username inválido para esta sessão"})
+                    continue
+
+                if requested_username is None:
+                    send_json(conn, {"status": "error", "message": "username em falta"})
+                    continue
+
+                pending = pop_pending_messages(requested_username)
+                users = load_users()
+                pending = enrich_with_sender_keys(pending, users)
 
                 send_json(conn, {
                     "status": "ok",
@@ -148,14 +185,23 @@ def handle_client(conn, addr):
     except Exception as e:
         print(f"Erro com {addr}: {e}")
     finally:
-        if username and username in online_users:
-            del online_users[username]
+        if username:
+            with online_users_lock:
+                if username in online_users:
+                    del online_users[username]
         conn.close()
 
 
 def main():
     server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    server.bind((HOST, PORT))
+    server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    try:
+        server.bind((HOST, PORT))
+    except OSError as exc:
+        print(f"Não foi possível abrir {HOST}:{PORT} ({exc}).")
+        print("Confirma se já existe outro server.py a correr e termina-o.")
+        server.close()
+        return
     server.listen(5)
     print(f"Servidor a escutar em {HOST}:{PORT}")
 
