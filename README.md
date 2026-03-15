@@ -2,7 +2,7 @@
 
 - A106811 - Gonçalo Francisco Loureiro Silva
 - A107321 - José Simão Correia de Campos
-- A106908 - José Miguel Torrinha Paredes Pinho Sampaio
+- A107378 - Henrique Moura Palma Brito
 
 ### Guiões Práticos
 
