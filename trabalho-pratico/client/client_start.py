@@ -5,6 +5,11 @@ from chat_state import ChatState
 from chat_ui import print_main_help, run_ui_loop
 from client_connection import connect_to_server, send_request
 from client_worker import listener_loop
+from common.secure_channel import (
+    HandshakeError,
+    client_handshake,
+    load_client_security_context,
+)
 from crypto_utils import public_key_to_pem
 from handlers.contact_handler import load_contacts
 
@@ -18,6 +23,15 @@ def main():
     state = ChatState.create(username)
     state.contacts = load_contacts(username)
     state.sock = connect_to_server()
+
+    try:
+        client_security = load_client_security_context(username=state.username)
+        state.session_key = client_handshake(state.sock, client_security)
+    except HandshakeError as exc:
+        print(f"Handshake autenticado falhou: {exc}")
+        state.stop_event.set()
+        state.sock.close()
+        return
 
     listener = threading.Thread(
         target=listener_loop,

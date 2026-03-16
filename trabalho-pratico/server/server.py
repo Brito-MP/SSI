@@ -7,6 +7,11 @@ ROOT_DIR = Path(__file__).resolve().parent.parent
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
+from common.secure_channel import (
+    HandshakeError,
+    load_server_security_context,
+    server_handshake,
+)
 from protocol import send_json, recv_json
 from storage import load_users, save_users, load_messages, save_messages
 
@@ -85,9 +90,11 @@ def enrich_with_sender_keys(messages, users: dict):
     return enriched
 
 
-def handle_client(conn, addr):
+def handle_client(conn, addr, security_ctx):
     username = None
     try:
+        server_handshake(conn, security_ctx)
+
         while True:
             msg = recv_json(conn)
             if msg is None:
@@ -182,6 +189,8 @@ def handle_client(conn, addr):
             else:
                 send_json(conn, {"status": "error", "message": "comando desconhecido"})
 
+    except HandshakeError as exc:
+        print(f"Handshake falhou com {addr}: {exc}")
     except Exception as e:
         print(f"Erro com {addr}: {e}")
     finally:
@@ -193,6 +202,8 @@ def handle_client(conn, addr):
 
 
 def main():
+    security_ctx = load_server_security_context()
+
     server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     try:
@@ -207,7 +218,7 @@ def main():
 
     while True:
         conn, addr = server.accept()
-        threading.Thread(target=handle_client, args=(conn, addr), daemon=True).start()
+        threading.Thread(target=handle_client, args=(conn, addr, security_ctx), daemon=True).start()
 
 
 if __name__ == "__main__":
