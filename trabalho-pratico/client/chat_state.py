@@ -38,6 +38,7 @@ class ChatState:
     private_key: Any
     public_key: Any
     sock: Any = None
+    session_key: bytes | None = None
     response_queue: queue.Queue = field(default_factory=queue.Queue)
     stop_event: threading.Event = field(default_factory=threading.Event)
     conversations: dict = field(default_factory=dict)
