@@ -1,13 +1,3 @@
-"""Brute-force attack for Caesar cipher.
-
-Usage examples:
-	python3 cesar_attack.py "IGXZGMUKYZGTUVGVU" BACO TACO
-	python3 cesar_attack.py "IGXZGMUKYZGTUVGVU" BACO PAPO
-
-Prints nothing when no key matches any provided word.
-On success prints two lines: the key letter and the recovered plaintext.
-"""
-
 import sys
 from typing import Iterable, Optional, Tuple
 
