@@ -18,6 +18,7 @@ from common.key_exchange import (
     load_ephemeral_public_key,
 )
 from common.security import (
+    client_username_from_certificate,
     sign_dh_keys,
     validate_certificate,
     validate_signature,
@@ -95,7 +96,7 @@ def _require_fields(payload: dict, required_fields: set[str], context: str):
         raise HandshakeError(f"{context}: campos em falta: {', '.join(sorted(missing))}")
 
 
-def server_handshake(sock, security_ctx: ServerSecurityContext) -> bytes:
+def server_handshake(sock, security_ctx: ServerSecurityContext):
     clear_session_key(sock)
 
     try:
@@ -111,6 +112,7 @@ def server_handshake(sock, security_ctx: ServerSecurityContext) -> bytes:
 
         if not validate_certificate(client_cert, security_ctx.ca_cert, client_or_server=0):
             raise HandshakeError("certificado do cliente inválido")
+        authenticated_username = client_username_from_certificate(client_cert)
 
         client_ephemeral_pub = _b64d(client_hello["client_ephemeral_key"])
         load_ephemeral_public_key(client_ephemeral_pub)  # valida tamanho/formato
@@ -155,7 +157,7 @@ def server_handshake(sock, security_ctx: ServerSecurityContext) -> bytes:
 
         send_json(sock, {"command": HANDSHAKE_OK})
         register_session_key(sock, session_key)
-        return session_key
+        return session_key, authenticated_username
 
     except HandshakeError as exc:
         _send_handshake_error(sock, str(exc))

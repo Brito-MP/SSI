@@ -36,6 +36,18 @@ def _certificate_common_name(cert: x509.Certificate):
         return None
 
 
+def client_username_from_certificate(cert: x509.Certificate):
+    cn = _certificate_common_name(cert)
+    if cn is None or not cn.startswith(CLIENT_COMMON_NAME_PREFIX):
+        return None
+
+    username = cn[len(CLIENT_COMMON_NAME_PREFIX):]
+    if not username:
+        return None
+
+    return username
+
+
 def validate_certificate(cert, ca_cert, client_or_server):
     ca_public_key = ca_cert.public_key()
     try:
@@ -58,7 +70,7 @@ def validate_certificate(cert, ca_cert, client_or_server):
         return False
 
     if client_or_server == 0:
-        return cn.startswith(CLIENT_COMMON_NAME_PREFIX)
+        return client_username_from_certificate(cert) is not None
     if client_or_server == 1:
         return cn == SERVER_COMMON_NAME
     return False
