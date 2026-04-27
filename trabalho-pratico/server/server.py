@@ -92,8 +92,9 @@ def enrich_with_sender_keys(messages, users: dict):
 
 def handle_client(conn, addr, security_ctx):
     username = None
+    authenticated_username = None
     try:
-        server_handshake(conn, security_ctx)
+        _, authenticated_username = server_handshake(conn, security_ctx)
 
         while True:
             msg = recv_json(conn)
@@ -104,7 +105,15 @@ def handle_client(conn, addr, security_ctx):
 
             if command == "register":
                 users = load_users()
-                username = msg["username"]
+                requested_username = msg.get("username")
+                if requested_username != authenticated_username:
+                    send_json(conn, {
+                        "status": "error",
+                        "message": "username não corresponde ao certificado autenticado",
+                    })
+                    continue
+
+                username = requested_username
                 users[username] = {
                     "public_key": msg["public_key"]
                 }
@@ -136,7 +145,7 @@ def handle_client(conn, addr, security_ctx):
                     send_json(conn, {"status": "error", "message": "destinatário não existe"})
                     continue
 
-                if username is not None and msg["from"] != username:
+                if msg["from"] != authenticated_username:
                     send_json(conn, {"status": "error", "message": "remetente inconsistente com a sessão"})
                     continue
 
@@ -162,7 +171,7 @@ def handle_client(conn, addr, security_ctx):
             elif command == "fetch_messages":
                 requested_username = msg.get("username")
 
-                if username is not None and requested_username != username:
+                if requested_username != authenticated_username:
                     send_json(conn, {"status": "error", "message": "username inválido para esta sessão"})
                     continue
 

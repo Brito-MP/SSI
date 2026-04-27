@@ -9,7 +9,8 @@ import os
 from cryptography.hazmat.primitives.asymmetric import rsa
 
 from common.key_exchange import derive_session_key
-from common.security import sign_dh_keys, validate_signature
+from common.certificates import load_client_certificate
+from common.security import client_username_from_certificate, sign_dh_keys, validate_signature
 
 from common.crypto import encrypt_message, decrypt_message
 
@@ -94,6 +95,17 @@ def test_session_key():
     print("OK - HKDF consistente")
 
 
+def test_certificate_username_binding():
+    print("\n[TESTE] Username no certificado")
+
+    cert = load_client_certificate("henrique")
+    username = client_username_from_certificate(cert)
+
+    assert username == "henrique"
+
+    print("OK - certificado vinculado ao username")
+
+
 def run_all():
     print("===== TESTES DE SEGURANÇA =====")
 
@@ -101,6 +113,7 @@ def run_all():
     test_signature()
     test_signature_tamper()
     test_session_key()
+    test_certificate_username_binding()
 
     print("\nTODOS OS TESTES PASSARAM")
 
