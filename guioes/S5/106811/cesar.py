@@ -1,13 +1,3 @@
-"""Caesar cipher command-line utility.
-
-Usage:
-	python3 cesar_cypher.py enc G "Cartago esta no papo"
-	python3 cesar_cypher.py dec G "IGXZGMUKYZGTVUGVU"
-
-The program only considers alphabetic characters, uppercases them, and drops
-everything else before applying the shift.
-"""
-
 import sys
 from typing import Literal
 

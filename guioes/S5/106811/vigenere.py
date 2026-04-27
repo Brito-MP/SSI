@@ -1,13 +1,3 @@
-"""Vigenere cipher command-line utility.
-
-Usage:
-	python3 vigenere.py enc BACO "CifraIndecifravel"
-	python3 vigenere.py dec BACO "DIHFBIPRFCKTSAXSM"
-
-Only alphabetic characters are kept, uppercased, and ciphered; other chars
-are discarded.
-"""
-
 import sys
 from typing import Iterable, List, Literal
 
