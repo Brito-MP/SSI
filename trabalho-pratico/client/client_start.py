@@ -11,7 +11,7 @@ from common.secure_channel import (
     load_client_security_context,
 )
 from crypto_utils import public_key_to_pem
-from handlers.contact_handler import load_contacts
+from handlers.contact_handler import sync_contacts
 
 
 def main():
@@ -21,7 +21,6 @@ def main():
         return
 
     state = ChatState.create(username)
-    state.contacts = load_contacts(username)
     state.sock = connect_to_server()
 
     try:
@@ -58,6 +57,7 @@ def main():
         print(register_resp.get("message", "erro no registo"))
         state.stop_event.set()
     else:
+        sync_contacts(state)
         print(register_resp.get("message", "registo concluído"))
         print_main_help()
 
