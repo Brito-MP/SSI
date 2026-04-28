@@ -6,6 +6,7 @@ import tempfile
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 USERS_FILE = os.path.join(BASE_DIR, "users.json")
 MESSAGES_FILE = os.path.join(BASE_DIR, "messages.json")
+CONTACTS_FIELD = "contacts"
 
 
 # Lê um ficheiro JSON e devolve um valor por omissão caso ainda não exista.
@@ -34,6 +35,26 @@ def load_users():
 
 def save_users(users):
     _save_json(USERS_FILE, users)
+
+
+def normalize_contacts(user_data):
+    contacts = user_data.get(CONTACTS_FIELD, [])
+    if not isinstance(contacts, list):
+        return []
+
+    clean_contacts = set()
+    for contact in contacts:
+        if isinstance(contact, str):
+            clean_contact = contact.strip()
+            if clean_contact:
+                clean_contacts.add(clean_contact)
+
+    return sorted(clean_contacts)
+
+
+def ensure_user_contacts(user_data):
+    user_data[CONTACTS_FIELD] = normalize_contacts(user_data)
+    return user_data[CONTACTS_FIELD]
 
 
 def load_messages():

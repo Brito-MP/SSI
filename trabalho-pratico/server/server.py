@@ -13,7 +13,7 @@ from common.secure_channel import (
     server_handshake,
 )
 from protocol import send_json, recv_json
-from storage import load_users, save_users, load_messages, save_messages
+from storage import ensure_user_contacts, load_users, save_users, load_messages, save_messages
 
 
 HOST = "127.0.0.1"
@@ -90,6 +90,13 @@ def enrich_with_sender_keys(messages, users: dict):
     return enriched
 
 
+def registered_user(users: dict, username: str):
+    user_data = users.get(username)
+    if not isinstance(user_data, dict) or "public_key" not in user_data:
+        return None
+    return user_data
+
+
 def handle_client(conn, addr, security_ctx):
     username = None
     authenticated_username = None
@@ -114,9 +121,12 @@ def handle_client(conn, addr, security_ctx):
                     continue
 
                 username = requested_username
-                users[username] = {
-                    "public_key": msg["public_key"]
-                }
+                user_data = users.get(username, {})
+                if not isinstance(user_data, dict):
+                    user_data = {}
+                user_data["public_key"] = msg["public_key"]
+                ensure_user_contacts(user_data)
+                users[username] = user_data
                 save_users(users)
                 with online_users_lock:
                     online_users[username] = conn
@@ -125,7 +135,7 @@ def handle_client(conn, addr, security_ctx):
             elif command == "get_user_key":
                 users = load_users()
                 target = msg["target"]
-                if target not in users:
+                if registered_user(users, target) is None:
                     send_json(conn, {"status": "error", "message": "utilizador não existe"})
                 else:
                     send_json(conn, {
@@ -141,7 +151,7 @@ def handle_client(conn, addr, security_ctx):
                     send_json(conn, {"status": "error", "message": "envelope de mensagem inválido"})
                     continue
 
-                if msg["to"] not in users:
+                if registered_user(users, msg["to"]) is None:
                     send_json(conn, {"status": "error", "message": "destinatário não existe"})
                     continue
 
@@ -188,11 +198,63 @@ def handle_client(conn, addr, security_ctx):
                     "messages": pending
                 })
 
-            elif command == "list_users":
+            elif command == "list_contacts":
                 users = load_users()
+                user_data = registered_user(users, authenticated_username)
+                if user_data is None:
+                    send_json(conn, {"status": "error", "message": "utilizador não registado"})
+                    continue
+
+                contacts = ensure_user_contacts(user_data)
+                users[authenticated_username] = user_data
+                save_users(users)
+
                 send_json(conn, {
                     "status": "ok",
-                    "users": sorted(users.keys())
+                    "contacts": contacts,
+                })
+
+            elif command == "add_contact":
+                users = load_users()
+                target = msg.get("target")
+
+                user_data = registered_user(users, authenticated_username)
+                if user_data is None:
+                    send_json(conn, {"status": "error", "message": "utilizador não registado"})
+                    continue
+
+                if not isinstance(target, str) or not target.strip():
+                    send_json(conn, {"status": "error", "message": "contacto inválido"})
+                    continue
+
+                target = target.strip()
+                if target == authenticated_username:
+                    send_json(conn, {"status": "error", "message": "não podes adicionar o teu próprio utilizador"})
+                    continue
+
+                if registered_user(users, target) is None:
+                    send_json(conn, {"status": "error", "message": "utilizador não existe"})
+                    continue
+
+                contacts = set(ensure_user_contacts(user_data))
+                already_contact = target in contacts
+                contacts.add(target)
+                user_data["contacts"] = sorted(contacts)
+                users[authenticated_username] = user_data
+                save_users(users)
+
+                send_json(conn, {
+                    "status": "ok",
+                    "message": f"{target} já está nos contactos." if already_contact else f"Contacto '{target}' adicionado.",
+                    "contacts": user_data["contacts"],
+                })
+
+            elif command == "list_users":
+                users = load_users()
+                registered_users = [user for user in users if registered_user(users, user) is not None]
+                send_json(conn, {
+                    "status": "ok",
+                    "users": sorted(registered_users)
                 })
 
             else:

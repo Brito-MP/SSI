@@ -11,6 +11,7 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 from common.key_exchange import derive_session_key
 from common.certificates import load_client_certificate
 from common.security import client_username_from_certificate, sign_dh_keys, validate_signature
+from storage import ensure_user_contacts, normalize_contacts
 
 from common.crypto import encrypt_message, decrypt_message
 
@@ -106,6 +107,22 @@ def test_certificate_username_binding():
     print("OK - certificado vinculado ao username")
 
 
+def test_contacts_metadata_normalization():
+    print("\n[TESTE] Normalização de contactos no servidor")
+
+    user_data = {
+        "public_key": "test",
+        "contacts": ["goncalo", " simao ", "goncalo", "", 123],
+    }
+
+    contacts = ensure_user_contacts(user_data)
+
+    assert contacts == ["goncalo", "simao"]
+    assert normalize_contacts({"contacts": "inválido"}) == []
+
+    print("OK - contactos normalizados")
+
+
 def run_all():
     print("===== TESTES DE SEGURANÇA =====")
 
@@ -114,6 +131,7 @@ def run_all():
     test_signature_tamper()
     test_session_key()
     test_certificate_username_binding()
+    test_contacts_metadata_normalization()
 
     print("\nTODOS OS TESTES PASSARAM")
 
