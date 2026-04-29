@@ -146,6 +146,78 @@ def canonical_message_bytes(message_dict: dict) -> bytes:
     return json.dumps(message_dict, sort_keys=True, separators=(",", ":")).encode()
 
 
+def normalize_contact_list(contacts):
+    clean_contacts = set()
+    if not isinstance(contacts, (list, set, tuple)):
+        return []
+
+    for contact in contacts:
+        if isinstance(contact, str):
+            clean_contact = contact.strip()
+            if clean_contact:
+                clean_contacts.add(clean_contact)
+
+    return sorted(clean_contacts)
+
+
+def protected_contacts_signed_part(owner: str, payload: dict):
+    return {
+        "type": "contacts",
+        "version": 1,
+        "owner": owner,
+        "payload": payload,
+    }
+
+
+def protect_contacts(owner: str, contacts, private_key, public_key):
+    contact_data = {
+        "owner": owner,
+        "contacts": normalize_contact_list(contacts),
+    }
+    payload = encrypt_for_recipient(json.dumps(contact_data, separators=(",", ":")), public_key)
+    signed_part = protected_contacts_signed_part(owner, payload)
+    signature = sign_message(canonical_message_bytes(signed_part), private_key)
+    return {
+        **signed_part,
+        "signature": signature,
+    }
+
+
+def verify_protected_contacts(protected_contacts: dict, owner: str, public_key) -> bool:
+    if not isinstance(protected_contacts, dict):
+        return False
+
+    payload = protected_contacts.get("payload")
+    if not isinstance(payload, dict):
+        return False
+
+    if protected_contacts.get("type") != "contacts":
+        return False
+    if protected_contacts.get("version") != 1:
+        return False
+    if protected_contacts.get("owner") != owner:
+        return False
+    if not all(isinstance(payload.get(field), str) for field in ["nonce", "ciphertext", "encrypted_key"]):
+        return False
+    if not isinstance(protected_contacts.get("signature"), str):
+        return False
+
+    signed_part = protected_contacts_signed_part(owner, payload)
+    return verify_signature(canonical_message_bytes(signed_part), protected_contacts["signature"], public_key)
+
+
+def unprotect_contacts(protected_contacts: dict, owner: str, private_key, public_key):
+    if not verify_protected_contacts(protected_contacts, owner, public_key):
+        raise ValueError("assinatura dos contactos inválida")
+
+    plaintext = decrypt_from_sender(protected_contacts["payload"], private_key)
+    contact_data = json.loads(plaintext)
+    if not isinstance(contact_data, dict) or contact_data.get("owner") != owner:
+        raise ValueError("dono dos contactos inválido")
+
+    return normalize_contact_list(contact_data.get("contacts", []))
+
+
 # Gera um identificador único para cada mensagem.
 def generate_message_id() -> str:
     return str(uuid.uuid4())

@@ -11,9 +11,9 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 from common.key_exchange import derive_session_key
 from common.certificates import load_client_certificate
 from common.security import client_username_from_certificate, sign_dh_keys, validate_signature
-from storage import ensure_user_contacts, normalize_contacts
 
 from common.crypto import encrypt_message, decrypt_message
+from crypto_utils import normalize_contact_list, protect_contacts, unprotect_contacts
 
 
 def generate_rsa_keypair():
@@ -108,19 +108,34 @@ def test_certificate_username_binding():
 
 
 def test_contacts_metadata_normalization():
-    print("\n[TESTE] Normalização de contactos no servidor")
+    print("\n[TESTE] Normalização de contactos")
 
-    user_data = {
-        "public_key": "test",
-        "contacts": ["goncalo", " simao ", "goncalo", "", 123],
-    }
-
-    contacts = ensure_user_contacts(user_data)
+    contacts = normalize_contact_list(["goncalo", " simao ", "goncalo", "", 123])
 
     assert contacts == ["goncalo", "simao"]
-    assert normalize_contacts({"contacts": "inválido"}) == []
+    assert normalize_contact_list("inválido") == []
 
     print("OK - contactos normalizados")
+
+
+def test_protected_contacts_roundtrip():
+    print("\n[TESTE] Contactos cifrados e assinados")
+
+    priv, pub = generate_rsa_keypair()
+    protected_contacts = protect_contacts("henrique", ["goncalo", " simao ", "goncalo"], priv, pub)
+    contacts = unprotect_contacts(protected_contacts, "henrique", priv, pub)
+
+    assert contacts == ["goncalo", "simao"]
+
+    protected_contacts["owner"] = "goncalo"
+    try:
+        unprotect_contacts(protected_contacts, "goncalo", priv, pub)
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("contactos alterados foram aceites")
+
+    print("OK - contactos protegidos contra leitura e alteração")
 
 
 def run_all():
@@ -132,6 +147,7 @@ def run_all():
     test_session_key()
     test_certificate_username_binding()
     test_contacts_metadata_normalization()
+    test_protected_contacts_roundtrip()
 
     print("\nTODOS OS TESTES PASSARAM")
 
