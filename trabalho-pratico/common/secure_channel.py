@@ -23,6 +23,7 @@ from common.security import (
     validate_certificate,
     validate_signature,
 )
+from crypto_utils import public_key_to_pem
 from protocol import clear_session_key, recv_json, register_session_key, send_json
 
 
@@ -113,6 +114,8 @@ def server_handshake(sock, security_ctx: ServerSecurityContext):
         if not validate_certificate(client_cert, security_ctx.ca_cert, client_or_server=0):
             raise HandshakeError("certificado do cliente inválido")
         authenticated_username = client_username_from_certificate(client_cert)
+        authenticated_public_key = public_key_to_pem(client_cert.public_key())
+        authenticated_certificate = certificate_to_pem(client_cert)
 
         client_ephemeral_pub = _b64d(client_hello["client_ephemeral_key"])
         load_ephemeral_public_key(client_ephemeral_pub)  # valida tamanho/formato
@@ -157,7 +160,7 @@ def server_handshake(sock, security_ctx: ServerSecurityContext):
 
         send_json(sock, {"command": HANDSHAKE_OK})
         register_session_key(sock, session_key)
-        return session_key, authenticated_username
+        return session_key, authenticated_username, authenticated_public_key, authenticated_certificate
 
     except HandshakeError as exc:
         _send_handshake_error(sock, str(exc))

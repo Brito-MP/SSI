@@ -12,7 +12,7 @@ from common.secure_channel import (
     load_server_security_context,
     server_handshake,
 )
-from crypto_utils import public_key_from_pem, verify_protected_contacts
+from crypto_utils import public_key_from_pem, public_key_to_pem, verify_protected_contacts
 from protocol import send_json, recv_json
 from storage import (
     PROTECTED_CONTACTS_FIELD,
@@ -100,16 +100,22 @@ def enrich_with_sender_keys(messages, users: dict):
 
 def registered_user(users: dict, username: str):
     user_data = users.get(username)
-    if not isinstance(user_data, dict) or "public_key" not in user_data:
+    if not isinstance(user_data, dict) or "public_key" not in user_data or "certificate" not in user_data:
         return None
     return user_data
+
+
+def canonical_public_key_pem(public_key_pem: str):
+    return public_key_to_pem(public_key_from_pem(public_key_pem))
 
 
 def handle_client(conn, addr, security_ctx):
     username = None
     authenticated_username = None
+    authenticated_public_key = None
+    authenticated_certificate = None
     try:
-        _, authenticated_username = server_handshake(conn, security_ctx)
+        _, authenticated_username, authenticated_public_key, authenticated_certificate = server_handshake(conn, security_ctx)
 
         while True:
             msg = recv_json(conn)
@@ -129,10 +135,40 @@ def handle_client(conn, addr, security_ctx):
                     continue
 
                 username = requested_username
+                try:
+                    requested_public_key = canonical_public_key_pem(msg["public_key"])
+                except Exception:
+                    send_json(conn, {"status": "error", "message": "chave pública inválida"})
+                    continue
+
+                if requested_public_key != authenticated_public_key:
+                    send_json(conn, {
+                        "status": "error",
+                        "message": "chave pública não corresponde ao certificado autenticado",
+                    })
+                    continue
+
                 user_data = users.get(username, {})
                 if not isinstance(user_data, dict):
                     user_data = {}
-                user_data["public_key"] = msg["public_key"]
+
+                existing_public_key = user_data.get("public_key")
+                if existing_public_key is not None:
+                    try:
+                        existing_public_key = canonical_public_key_pem(existing_public_key)
+                    except Exception:
+                        send_json(conn, {"status": "error", "message": "chave pública registada inválida"})
+                        continue
+
+                    if existing_public_key != requested_public_key:
+                        send_json(conn, {
+                            "status": "error",
+                            "message": "utilizador já registado com outra chave pública",
+                        })
+                        continue
+
+                user_data["public_key"] = requested_public_key
+                user_data["certificate"] = authenticated_certificate
                 user_data.pop("contacts", None)
                 users[username] = user_data
                 save_users(users)
@@ -149,7 +185,8 @@ def handle_client(conn, addr, security_ctx):
                     send_json(conn, {
                         "status": "ok",
                         "target": target,
-                        "public_key": users[target]["public_key"]
+                        "public_key": users[target]["public_key"],
+                        "certificate": users[target].get("certificate"),
                     })
 
             elif command == "send_message":
