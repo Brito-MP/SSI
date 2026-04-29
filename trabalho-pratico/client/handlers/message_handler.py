@@ -11,11 +11,14 @@ from crypto_utils import (
     encrypt_for_recipient,
     generate_message_id,
     public_key_from_pem,
+    public_key_to_pem,
     sign_message,
     utc_timestamp,
     verify_signature,
 )
 from client_connection import send_request
+from common.certificates import certificate_from_pem, load_ca_certificate
+from common.security import client_username_from_certificate, validate_certificate
 from handlers.conversation_handler import save_to_history
 
 
@@ -104,10 +107,31 @@ def get_user_key(state, target):
         print(resp.get("message", "erro a obter chave pública"))
         return None
 
+    certificate_pem = resp.get("certificate")
+    if not isinstance(certificate_pem, str):
+        print(f"Certificado de {target} em falta.")
+        return None
+
     try:
+        cert = certificate_from_pem(certificate_pem)
+        ca_cert = load_ca_certificate()
+        if not validate_certificate(cert, ca_cert, client_or_server=0):
+            print(f"Certificado de {target} inválido.")
+            return None
+
+        cert_username = client_username_from_certificate(cert)
+        if cert_username != target:
+            print(f"Certificado recebido não pertence a {target}.")
+            return None
+
         key = public_key_from_pem(resp["public_key"])
+        cert_key_pem = public_key_to_pem(cert.public_key())
+        received_key_pem = public_key_to_pem(key)
+        if received_key_pem != cert_key_pem:
+            print(f"Chave pública de {target} não corresponde ao certificado.")
+            return None
     except Exception as exc:
-        print(f"Erro ao carregar chave pública de {target}: {exc}")
+        print(f"Erro ao validar chave pública de {target}: {exc}")
         return None
 
     with state.key_cache_lock:

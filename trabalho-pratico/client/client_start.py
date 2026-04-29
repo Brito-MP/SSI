@@ -21,7 +21,11 @@ def main():
         return
 
     state = ChatState.create(username)
-    state.sock = connect_to_server()
+    try:
+        state.sock = connect_to_server()
+    except OSError:
+        print("Server is offline. Check if server.py is running.")
+        return
 
     try:
         client_security = load_client_security_context(username=state.username)

@@ -13,7 +13,7 @@ from common.certificates import load_client_certificate
 from common.security import client_username_from_certificate, sign_dh_keys, validate_signature
 
 from common.crypto import encrypt_message, decrypt_message
-from crypto_utils import normalize_contact_list, protect_contacts, unprotect_contacts
+from crypto_utils import normalize_contact_list, protect_contacts, public_key_to_pem, unprotect_contacts
 
 
 def generate_rsa_keypair():
@@ -107,6 +107,18 @@ def test_certificate_username_binding():
     print("OK - certificado vinculado ao username")
 
 
+def test_certificate_public_key_binding():
+    print("\n[TESTE] Chave pública vinculada ao certificado")
+
+    cert = load_client_certificate("henrique")
+    cert_public_key = public_key_to_pem(cert.public_key())
+    register_public_key = public_key_to_pem(cert.public_key())
+
+    assert register_public_key == cert_public_key
+
+    print("OK - chave pública corresponde ao certificado")
+
+
 def test_contacts_metadata_normalization():
     print("\n[TESTE] Normalização de contactos")
 
@@ -146,6 +158,7 @@ def run_all():
     test_signature_tamper()
     test_session_key()
     test_certificate_username_binding()
+    test_certificate_public_key_binding()
     test_contacts_metadata_normalization()
     test_protected_contacts_roundtrip()
 
