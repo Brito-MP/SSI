@@ -1,5 +1,5 @@
 from client_connection import send_request
-from handlers.contact_handler import cmd_add_contact, cmd_contacts
+from handlers.contact_handler import cmd_add_contact, cmd_contacts, cmd_remove_contact
 from handlers.conversation_handler import cmd_conversations, cmd_open
 from handlers.message_handler import cmd_send, cmd_sync
 
@@ -14,6 +14,7 @@ def print_main_help():
     print("Comandos:")
     print("  contacts")
     print("  add_contact <user>")
+    print("  remove_contact <user>")
     print("  open <user>")
     print("  conversations")
     print("  sync")
@@ -85,6 +86,15 @@ def run_ui_loop(state):
 
             target = parts[1].strip()
             cmd_add_contact(state, target)
+
+        elif cmd == "remove_contact" or cmd.startswith("remove_contact "):
+            parts = cmd.split(" ", 1)
+            if len(parts) < 2 or not parts[1].strip():
+                print("Uso: remove_contact <user>")
+                continue
+
+            target = parts[1].strip()
+            cmd_remove_contact(state, target)
 
         elif cmd == "list":
             cmd_list_users(state)

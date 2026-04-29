@@ -1,18 +1,6 @@
 from client_connection import send_request
+from crypto_utils import normalize_contact_list, protect_contacts, unprotect_contacts
 from handlers.message_handler import get_user_key
-
-
-def parse_contacts(data):
-    if not isinstance(data, list):
-        return set()
-    contacts = set()
-    for item in data:
-        if isinstance(item, str):
-            clean_item = item.strip()
-            if clean_item:
-                contacts.add(clean_item)
-
-    return contacts
 
 
 def sync_contacts(state):
@@ -31,7 +19,63 @@ def sync_contacts(state):
         print(resp.get("message", "erro ao sincronizar contactos"))
         return False
 
-    state.contacts = parse_contacts(resp.get("contacts", []))
+    protected_contacts = resp.get("protected_contacts")
+    if protected_contacts is not None:
+        try:
+            state.contacts = set(unprotect_contacts(
+                protected_contacts,
+                state.username,
+                state.private_key,
+                state.public_key,
+            ))
+            return True
+        except Exception as exc:
+            print(f"[AVISO] contactos protegidos inválidos: {exc}")
+            return False
+
+    state.contacts = set()
+    return update_contacts(state)
+
+
+def update_contacts(state):
+    protected_contacts = protect_contacts(
+        state.username,
+        state.contacts,
+        state.private_key,
+        state.public_key,
+    )
+    resp = send_request(
+        state.sock,
+        state.response_queue,
+        state.stop_event,
+        {
+            "command": "update_contacts",
+            "protected_contacts": protected_contacts,
+        },
+    )
+
+    if resp is None:
+        print("Ligação perdida ao atualizar contactos.")
+        return False
+
+    if resp.get("status") != "ok":
+        print(resp.get("message", "erro ao atualizar contactos"))
+        return False
+
+    protected_contacts = resp.get("protected_contacts")
+    if protected_contacts is not None:
+        try:
+            state.contacts = set(unprotect_contacts(
+                protected_contacts,
+                state.username,
+                state.private_key,
+                state.public_key,
+            ))
+        except Exception as exc:
+            print(f"[AVISO] servidor guardou contactos inválidos: {exc}")
+            return False
+
+    state.contacts = set(normalize_contact_list(state.contacts))
     return True
 
 
@@ -47,6 +91,8 @@ def cmd_contacts(state):
 
 
 def cmd_add_contact(state, target):
+    sync_contacts(state)
+
     if target == state.username:
         print("Não podes adicionar o teu próprio utilizador.")
         return
@@ -59,20 +105,27 @@ def cmd_add_contact(state, target):
     if key is None:
         return
 
-    resp = send_request(
-        state.sock,
-        state.response_queue,
-        state.stop_event,
-        {"command": "add_contact", "target": target},
-    )
-
-    if resp is None:
-        print("Ligação perdida ao adicionar contacto.")
+    state.contacts.add(target)
+    if not update_contacts(state):
+        state.contacts.discard(target)
         return
 
-    if resp.get("status") != "ok":
-        print(resp.get("message", "erro ao adicionar contacto"))
+    print(f"Contacto '{target}' adicionado.")
+
+
+def cmd_remove_contact(state, target):
+    sync_contacts(state)
+
+    if target not in state.contacts:
+        print(f"{target} não está nos contactos.")
         return
 
-    state.contacts = parse_contacts(resp.get("contacts", []))
-    print(resp.get("message", f"Contacto '{target}' adicionado."))
+    state.contacts.remove(target)
+    if not update_contacts(state):
+        state.contacts.add(target)
+        return
+
+    if state.active_conversation == target:
+        state.active_conversation = None
+
+    print(f"Contacto '{target}' removido.")

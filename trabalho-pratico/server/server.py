@@ -12,8 +12,16 @@ from common.secure_channel import (
     load_server_security_context,
     server_handshake,
 )
+from crypto_utils import public_key_from_pem, verify_protected_contacts
 from protocol import send_json, recv_json
-from storage import ensure_user_contacts, load_users, save_users, load_messages, save_messages
+from storage import (
+    PROTECTED_CONTACTS_FIELD,
+    load_users,
+    save_users,
+    load_messages,
+    save_messages,
+    set_protected_contacts,
+)
 
 
 HOST = "127.0.0.1"
@@ -125,7 +133,7 @@ def handle_client(conn, addr, security_ctx):
                 if not isinstance(user_data, dict):
                     user_data = {}
                 user_data["public_key"] = msg["public_key"]
-                ensure_user_contacts(user_data)
+                user_data.pop("contacts", None)
                 users[username] = user_data
                 save_users(users)
                 with online_users_lock:
@@ -205,48 +213,37 @@ def handle_client(conn, addr, security_ctx):
                     send_json(conn, {"status": "error", "message": "utilizador não registado"})
                     continue
 
-                contacts = ensure_user_contacts(user_data)
-                users[authenticated_username] = user_data
-                save_users(users)
-
                 send_json(conn, {
                     "status": "ok",
-                    "contacts": contacts,
+                    "protected_contacts": user_data.get(PROTECTED_CONTACTS_FIELD),
                 })
 
-            elif command == "add_contact":
+            elif command == "update_contacts":
                 users = load_users()
-                target = msg.get("target")
-
                 user_data = registered_user(users, authenticated_username)
                 if user_data is None:
                     send_json(conn, {"status": "error", "message": "utilizador não registado"})
                     continue
 
-                if not isinstance(target, str) or not target.strip():
-                    send_json(conn, {"status": "error", "message": "contacto inválido"})
+                protected_contacts = msg.get("protected_contacts")
+                try:
+                    public_key = public_key_from_pem(user_data["public_key"])
+                except Exception:
+                    send_json(conn, {"status": "error", "message": "chave pública do utilizador inválida"})
                     continue
 
-                target = target.strip()
-                if target == authenticated_username:
-                    send_json(conn, {"status": "error", "message": "não podes adicionar o teu próprio utilizador"})
+                if not verify_protected_contacts(protected_contacts, authenticated_username, public_key):
+                    send_json(conn, {"status": "error", "message": "contactos protegidos inválidos"})
                     continue
 
-                if registered_user(users, target) is None:
-                    send_json(conn, {"status": "error", "message": "utilizador não existe"})
-                    continue
-
-                contacts = set(ensure_user_contacts(user_data))
-                already_contact = target in contacts
-                contacts.add(target)
-                user_data["contacts"] = sorted(contacts)
+                set_protected_contacts(user_data, protected_contacts)
                 users[authenticated_username] = user_data
                 save_users(users)
 
                 send_json(conn, {
                     "status": "ok",
-                    "message": f"{target} já está nos contactos." if already_contact else f"Contacto '{target}' adicionado.",
-                    "contacts": user_data["contacts"],
+                    "message": "contactos atualizados",
+                    "protected_contacts": user_data[PROTECTED_CONTACTS_FIELD],
                 })
 
             elif command == "list_users":
