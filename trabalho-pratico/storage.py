@@ -6,6 +6,7 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 USERS_FILE = os.path.join(BASE_DIR, "users.json")
 MESSAGES_FILE = os.path.join(BASE_DIR, "messages.json")
 PROTECTED_CONTACTS_FIELD = "protected_contacts"
+PROTECTED_GROUPS_FIELD = "protected_groups"
 
 
 # Lê um ficheiro JSON e devolve um valor por omissão caso ainda não exista.
@@ -39,6 +40,11 @@ def save_users(users):
 def set_protected_contacts(user_data, protected_contacts):
     user_data[PROTECTED_CONTACTS_FIELD] = protected_contacts
     user_data.pop("contacts", None)
+
+
+def set_protected_groups(user_data, protected_groups):
+    user_data[PROTECTED_GROUPS_FIELD] = protected_groups
+    user_data.pop("groups", None)
 
 
 def load_messages():

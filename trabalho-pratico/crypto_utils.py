@@ -160,6 +160,32 @@ def normalize_contact_list(contacts):
     return sorted(clean_contacts)
 
 
+def normalize_groups(groups):
+    clean_groups = {}
+    if not isinstance(groups, dict):
+        return {}
+
+    for group_id, group in groups.items():
+        if not isinstance(group_id, str):
+            continue
+        clean_group_id = group_id.strip()
+        if not clean_group_id or not isinstance(group, dict):
+            continue
+
+        name = group.get("name", clean_group_id)
+        if not isinstance(name, str):
+            name = clean_group_id
+        clean_name = name.strip() or clean_group_id
+
+        clean_members = normalize_contact_list(group.get("members", []))
+        clean_groups[clean_group_id] = {
+            "name": clean_name,
+            "members": clean_members,
+        }
+
+    return dict(sorted(clean_groups.items()))
+
+
 def protected_contacts_signed_part(owner: str, payload: dict):
     return {
         "type": "contacts",
@@ -216,6 +242,64 @@ def unprotect_contacts(protected_contacts: dict, owner: str, private_key, public
         raise ValueError("dono dos contactos inválido")
 
     return normalize_contact_list(contact_data.get("contacts", []))
+
+
+def protected_groups_signed_part(owner: str, payload: dict):
+    return {
+        "type": "groups",
+        "version": 1,
+        "owner": owner,
+        "payload": payload,
+    }
+
+
+def protect_groups(owner: str, groups, private_key, public_key):
+    group_data = {
+        "owner": owner,
+        "groups": normalize_groups(groups),
+    }
+    payload = encrypt_for_recipient(json.dumps(group_data, separators=(",", ":")), public_key)
+    signed_part = protected_groups_signed_part(owner, payload)
+    signature = sign_message(canonical_message_bytes(signed_part), private_key)
+    return {
+        **signed_part,
+        "signature": signature,
+    }
+
+
+def verify_protected_groups(protected_groups: dict, owner: str, public_key) -> bool:
+    if not isinstance(protected_groups, dict):
+        return False
+
+    payload = protected_groups.get("payload")
+    if not isinstance(payload, dict):
+        return False
+
+    if protected_groups.get("type") != "groups":
+        return False
+    if protected_groups.get("version") != 1:
+        return False
+    if protected_groups.get("owner") != owner:
+        return False
+    if not all(isinstance(payload.get(field), str) for field in ["nonce", "ciphertext", "encrypted_key"]):
+        return False
+    if not isinstance(protected_groups.get("signature"), str):
+        return False
+
+    signed_part = protected_groups_signed_part(owner, payload)
+    return verify_signature(canonical_message_bytes(signed_part), protected_groups["signature"], public_key)
+
+
+def unprotect_groups(protected_groups: dict, owner: str, private_key, public_key):
+    if not verify_protected_groups(protected_groups, owner, public_key):
+        raise ValueError("assinatura dos grupos inválida")
+
+    plaintext = decrypt_from_sender(protected_groups["payload"], private_key)
+    group_data = json.loads(plaintext)
+    if not isinstance(group_data, dict) or group_data.get("owner") != owner:
+        raise ValueError("dono dos grupos inválido")
+
+    return normalize_groups(group_data.get("groups", {}))
 
 
 # Gera um identificador único para cada mensagem.

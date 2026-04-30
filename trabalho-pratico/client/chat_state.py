@@ -43,6 +43,9 @@ class ChatState:
     stop_event: threading.Event = field(default_factory=threading.Event)
     conversations: dict = field(default_factory=dict)
     conversations_lock: threading.Lock = field(default_factory=threading.Lock)
+    groups: dict = field(default_factory=dict)
+    groups_deleted: set = field(default_factory=set)
+    groups_dirty: bool = False
     key_cache: dict = field(default_factory=dict)
     key_cache_lock: threading.Lock = field(default_factory=threading.Lock)
     contacts: set = field(default_factory=set)

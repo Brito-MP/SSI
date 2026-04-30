@@ -12,6 +12,7 @@ from common.secure_channel import (
 )
 from crypto_utils import public_key_to_pem
 from handlers.contact_handler import sync_contacts
+from handlers.message_handler import sync_groups, update_groups
 
 
 def main():
@@ -62,6 +63,7 @@ def main():
         state.stop_event.set()
     else:
         sync_contacts(state)
+        sync_groups(state)
         print(register_resp.get("message", "registo concluído"))
         print_main_help()
 
@@ -70,6 +72,8 @@ def main():
     except KeyboardInterrupt:
         pass
     finally:
+        if state.groups_dirty and not state.stop_event.is_set():
+            update_groups(state)
         state.stop_event.set()
         try:
             state.sock.shutdown(socket.SHUT_RDWR)

@@ -94,5 +94,197 @@
       "encrypted_key": "WuasP1yNZZp8XqJoJjf1KmooXhbTYuBUnpwPT7WUxGOWCXEwqNrDfF7itEK9VUDb0MFkGQt5m+pvAlGrZqMkCQ+uIwLNALrk+XXXMQs3Gz5hpYKGtLl26zeQlOZ6vx2vE8vzb0hemLg6XwnPZsIXSNkx4g0pC5Sngx0T0IigaQYSZ4mimYz14Aa+Kpoc+istvRnXSAKmEjYnYOkNlFiBqDMr9nCbmhniPlRo3jJ4XstRKsV4ez3IeV+GsxLkjSb1mcvAkQ8NDb6ocyQAS5HCP60lfYQFARUin9GFErVWlNsw0OxnMjfSoMwn4xKS/I+cqxtR6g6psaxlAVAQeNjRpQ=="
     },
     "signature": "XEPNrkAAz+SftggTKP66mstWt6K3yHHriMxHE1U5lLEOtMegEwoHeaUnKKcK0Mffkgvcn3nAkSNCJ/r4KlqGONsqQ3jOzCsRZBFiMzGTRZJWT+ImW3aA7efYX+myEObM7pZ0jKTjd0lmXYw+z+7/eNzmpnTqWzwt+0YTnTQh5t4bWZkfMr8F4QaZU9oWsm58oEBTwvp1KNSvGHdq+DlnDv7fp3m35Eik4FU1jO75eqTZUP16W7mjAG1MyZhBphZZdDc7j/FBRMwIdsKLNkHav8vlUH6yRdglZPUiiLBSzCTXBoeeDtpsY1wM+Xw9WF6ilSheZMSdXk3Zxr3mYDWGQQ=="
+  },
+  {
+    "message_id": "900dd299-0b5d-48ae-9481-a3045d0a3461",
+    "timestamp": "2026-04-30T15:38:44.750352+00:00",
+    "from": "henrique",
+    "to": "simao",
+    "payload": {
+      "nonce": "kDH/uN2XTikK7lfN",
+      "ciphertext": "p8mqSwQd0M2WOpFAgbmcNUrSu1zkdldxow==",
+      "encrypted_key": "C/bTI87RdT6dgGD4G71FeBFT6yUqsdZ3QEdlvBHViOPBgm4hfty2Th7E62D40+yhuWT5iytC1wrcoDsICMDoQtiNFgdNDRMdWKxEj4RiqB9EjEEsCgcvJblBGz/AtdOx+H2aPR8kbSuhyKg2RJeNwYLsimrf889+szhVzmHUeN11fQk9NnZNjCCbJAr5Vela4aZzC5dyRl+IEL6pfzYZB5wGm6hVl69zJxs7TGsoOXZJtaIoiKeGaE+7jLY5lYjISo5KI0oXhntzfmJvyOVNTt4qXzC5jDsxAo7g1uEdyPJwXrJP5QDLn/3QS4BRHnr8CjPKPjL4VW2ZZyVKO9x0Tg=="
+    },
+    "signature": "lX5yRwcpQReJHifgMND4V74jST68IXKZlvLzFBjLe38dNhDZLEtHmRFV5dv57q4VWCDVRM+UXr7MeTVG8UDjiS2y+vHOKXIowQ54JKMemFu4zf+jCmryWF5W2iCi4t6kj1c3uaQ/PgceqNBQI9Nn0xi/xOq+rjlcJeYJkyaT36+YC36ak3qvrSIth9wxjSnLqgWhzK9Oh6OsCZDJGjGJq+Q6TNQxpumFUmzOMPN8rqzawzAz6R/2YojEVDK9DtL7MgRFe1Eu36D7q7TICwunQ+hels5q+HZGcoWeIeoeNPHFAPDouO4KlhpiAVfxrwnKHMuQNWrxGpiSm0zCmG6eSg==",
+    "group_name": "equipa",
+    "group_members": [
+      "goncalo",
+      "henrique",
+      "simao"
+    ],
+    "group_id": "group-5e36a8fc-b647-46bf-bbb0-f8b864bc618b"
+  },
+  {
+    "message_id": "73584b8d-e353-4468-a472-34a64def9fb8",
+    "timestamp": "2026-04-30T15:39:23.561201+00:00",
+    "from": "goncalo",
+    "to": "henrique",
+    "payload": {
+      "nonce": "1GXnlGjHgSJK6XL/",
+      "ciphertext": "mCNsTWpdnWgr/X6BfVAEu3M67Q==",
+      "encrypted_key": "k+kt1A3GY6wAY9J8aqZbotLwU7wfca514tbq18CZKOrdzdAKY7Am5zaEiDqFZbIaBYo6qHdpmRPYMNwh+9BcZt7V00pM5jLyQTkr6ZUZIhNNK5WYX8A+89AHE0VpDI2YohpLgpTGiI11iUArWVBnXyEvjOqlSq61hdj9tTfpwTZefL8g6KomiarJFdYnbibqRiGDw1ef7+cg6ztimHTbBQyxTUiV03d2vuCZ0qa7aK8sZcpk/09o3ThYXdoPToKcAcoJkeoYCu2wCGcollaSjCXK2BgVMi9qs0EcxVHfgFzkp79JB2FesQeNs2cAYKiCaZkNFatR+3vW0KjwNb+xKg=="
+    },
+    "signature": "aJjSLfke3IGICRkzPflrS/XmlKalYPkbjNfjzXFR8jMVKN+x4ACYr2T7+bAhLboojBQ4sL76XoD9dGHA154Zerz8XIF7GnwdN0tSqHZVth5pEZ7NYEGstl1wts5jgAncWzEBD918KcYs+ZTouaO+3OMlxytlKAqcIp9X5ZsWTyki1aOjkNvOFWz2JbQ+PviW19kg+ycRR/IOnfPX32Rdb9LtajB84TYTQz2dvcN5t96YAKbud/JMl+I5+P0YEV9SDh9OQ6JQARppofEJ7VTsmiUt4j8UY4x9zl2Prnej/2oNMw2xJaYibCPYE8AX7da+3vEXzZfQjSpZtT2NzHrteA==",
+    "group_name": "equipa",
+    "group_members": [
+      "goncalo",
+      "henrique",
+      "simao"
+    ],
+    "group_id": "group-5e36a8fc-b647-46bf-bbb0-f8b864bc618b"
+  },
+  {
+    "message_id": "d6c54525-97fa-495b-9531-8ddf9dd4dc1e",
+    "timestamp": "2026-04-30T15:39:23.563221+00:00",
+    "from": "goncalo",
+    "to": "simao",
+    "payload": {
+      "nonce": "8riyJJKCgh5x5Wam",
+      "ciphertext": "QbeVNurFPfT/GCNYHeiNU/2rew==",
+      "encrypted_key": "WH6VkZq7C8CER8+EQPB2kRkHzq4CoGhSaUkmNC39Lq1JL3s6xE78axWnFw/5/x9vfZOlJOJdtuiqrVRnMJidpIYru8V/XhUUN7ApMj+MzM+t/oV6YOivjhkOAnFDrObJ2UyGVQjvO8O4A2Gp+M24hsSGkpcDIks6mGOvZevdM4PDNClPeGHYDrqK7976QZpKqXp5kRR5KFJwW9NecFOWfxtIP2fSLkL/BVefP/i7IRC4f0L9YLn0uSM96cv2W919y6bKTum8zCDf1lswzbYTFGDlkZOzmctMLtH7qjejL9WiTn2By0iyDA0GyC0L/2xMdnY99ZbY8QpW/BlHW6m67Q=="
+    },
+    "signature": "cfeOPsEldYlQiDwijrdc3J+xy6LU9SYNjTInkB3S0fmQyPIUjI8Q3SaOEHWeIc/XNcKb7R9FuCBp3UgPuEVOmh1xo8Cp5a9eXEgGkyYSCNPJzNXgUQSWS3ReUQRJHevR3tYngvSYht6bg4qEsuF9dxgypOlkSqxVJPe//62t59RBUmUy80cCWGKfPVSeFL564c8gRFdX6bOw6hMbuVbRysa9gYfQ1D4pcZkzlv0GzdBEEZ/RoGCgMQYk3cWuuA4zXHvIVEI6w2MqZO0zoE2nHlw4LS5rzwg2i0T+0a1be3Tt1o0NNM+aJ2An+d41Cbn4XQgo1HFvSvQuYBUPgqu+Vg==",
+    "group_name": "equipa",
+    "group_members": [
+      "goncalo",
+      "henrique",
+      "simao"
+    ],
+    "group_id": "group-5e36a8fc-b647-46bf-bbb0-f8b864bc618b"
+  },
+  {
+    "message_id": "d700274b-73b6-4ee2-bf65-7cb81c59e876",
+    "timestamp": "2026-04-30T16:02:33.631428+00:00",
+    "from": "henrique",
+    "to": "simao",
+    "payload": {
+      "nonce": "qANcFWPpSgJGsN5j",
+      "ciphertext": "arDzbZSrkbc81PXM1v+1GMcx1Oj2WmIdoQmjY5rhcbQzP+EqVCCHMvRYxIGUEueSRhUE3tBSKSKDG0i6hboRLceuotq9fg==",
+      "encrypted_key": "D+36Hl93Mb7ykBuZA9fJKs10XaylSiRZoEm3iuYm1NsU03h9t0Yll0T3HDAOUMlvu4Itd9XNtYGlI8dYuFMjJJRoE129lntujM8BNaDRrPsUg9+Ry/BjAaxykqpoviv/dsrFYlwQ6NQ5M7S4rVqbRbvLZirvzMB33TPTiwMo32r9TxWyiBZVM0mqsnDk3dBuyNqvVD3qeG+Ee4KPiZ+n5ocwTqR0UKKaxA4esM+aqVAZtvkrjTSOq6ZlFb2lKmXgOjgT4QugNu2hkDSYzpvNsBH8DD45oDXq9AKYMiH9XuIPojdKQhUu92ugKDDnrWN28z1ZfTy5Bu7IHhEIvheVwA=="
+    },
+    "signature": "3EcGPJC0f8e7c6VBKKyMC1t9aLfHozGjO/e2jQhucJYwNqGVfEJjyPtVQuyTNZg6YFlrTp/EUDMZcmjNn6U1neBvgyZncdzIE5LISLTF24le3T/kYb6te6Ud9qECIpwUidvfwGiHKYeVOnmC8+nZu6EjhMppF9/LOItwNMorJCqxyBCMq56O9A2bdAnDv/vHrCsboRV4aIBWJttZSZs4lXxWbLUzF3Qmhpp0umagOFWpFpD0MDoMz8Grzk0pyW+bcwTn3bTENZrhI0TjqBBVICeJMvBdWOycNlCzOM2evslawDrVKy/8O9fbPipi+ojb/+gKlvlSQ8kiG+eWR6y6sw==",
+    "group_members": [
+      "goncalo",
+      "henrique",
+      "simao"
+    ],
+    "group_name": "equipa ssi",
+    "group_id": "group-equipa-ssi"
+  },
+  {
+    "message_id": "a7259d14-7a97-43f9-8896-d46460b0cfbc",
+    "timestamp": "2026-04-30T16:03:26.009941+00:00",
+    "from": "goncalo",
+    "to": "henrique",
+    "payload": {
+      "nonce": "yU/eHxBnHi+ak1Tp",
+      "ciphertext": "KlwwY5DZqrIjLjvdZDlCxf5m4XgKEHg/JBcAtmulQ7HM34Cjv1cLC3Zy7GKQnjnsi3sBywwkxUQ=",
+      "encrypted_key": "suje+0fJsxw8VImD0fENaIxk0ImGXxDg8pt3JOFEVS/XJeEx4giVM6KCbNM0L7j+pNQ85AyGBdpIRlab36ApmD81mN+Ec6MV+dVDI3KIQDpsknWi0fR7yd7Yb4AIbi+SW39EGwIPgePkP1i07boA08+qP8QMLNuRgd/gjAg+jzrtBfm8YiCOtqxhf7SBIwUzK7/ZE9SJp/oWQF9RbCroXsW0hbzrE0vEqLzeN8wphcHgnho1iLK7Vt6zjYxTQ/QryM8/0IvHOe99/9YuLSCggRi0nIJ45Wica0BifoRc5StyC+GNzYiWl5738BIsbhXVn1g+m0XhkvWlD6RWvY89rQ=="
+    },
+    "signature": "hWyTA/+4Z64RAinWdtrXD3b5K7l30QAmFxQ6inUxNAhahsSF3JpSPeCxzr/NKDXUiHlNYhxGi5ARdliStbBRKdiB1e5qrBGCCkqxD/Eqd/Vnh12kHt975VWKz96KgcaO8qHMcBlbtnwCMATq1Na0htRDhvJSWPNcG79l3hFGwyYS5G5mfK0qCUBUw9v0caCfhjs+oTiGnc1JMRt0wUgnv5KARHBaqPj/ysnE1VnUD16jupqG1uBWFYR0vbroAJedOtAoPlRo317b17F0jWH4LPGl0QSU8VWappySs/lKWYj9AQ+Aq/CBf8H9NM+3pjYuG3wlF3zN+ByAAwySQKm9ow==",
+    "group_members": [
+      "goncalo",
+      "henrique",
+      "simao"
+    ],
+    "group_name": "equipa ssi",
+    "group_id": "group-equipa-ssi"
+  },
+  {
+    "message_id": "9daa59e7-1f54-4fff-8f53-3398932b28e4",
+    "timestamp": "2026-04-30T16:03:26.016822+00:00",
+    "from": "goncalo",
+    "to": "simao",
+    "payload": {
+      "nonce": "CubFb89y68tm4lfA",
+      "ciphertext": "EQBXzHcQq1JVLXQlmywXm/yIiJRLKlZ5U1uLSeSMykKwXP1TsK1Kvbe1uudNwyL1PO21OULKGEE=",
+      "encrypted_key": "jr5AgWTLhT/nMNubJgNZAWYQEtJr57cJKFmUqg4hwEOin5CE1yz7e1ajzFuOCWLtJyTAnqtALldtOHwbOjdLgBbnUeyxkVDUbRPuDv/23hZtG/SQpAOfFUhb5zkSx6c3jV4iRR2h+BPbvSolZcQ37eBAZLEH06/pjJJv/id1tYfHxQJj31TLV3W0lBbo1iNa3Umwg6jchSxEqrE57gqwb1kXRZjnN5qeS4njjoO3AZZUMenL46eLkKSg6jsYPRG7L1xwy/N4ttC5rJLdwyfOrhlYaK7NuH4v6E6vQHttG2KguGfgbnQBFAnZ1rzNEmhik2EnOAoFbMLWPQ0ztF3YLA=="
+    },
+    "signature": "BV7i65IQBN0DVC7nEaL5GHPjps+Ci1p///0nExDgsySGkXAHqU7hTdYNi+sieOt4pTKwMkIpiu5JhRIVb5pUaGEYSeJ/cbvXtpS1PUuZL/3LHztzZkP5vhVZPUY6HnM0JsJBvdUC2IFdnbH+6s3RsN0MNRYNQKAqe78nWDiAvIcqtTwuflz0H33zlf2OtA9m/rppnEFYm2OgwD77SB3rgitnEt9jU2/vT2c/RfOA4FuEncCh7T0w5P887Dtz90ZRkkQBjRV5VGqLIRnI5boLk54sgofW1zV0KoH6uAcsVrQhi+x281+922EoQ8dMDSPHWj8UGFfGJtnafsC08qgS2g==",
+    "group_members": [
+      "goncalo",
+      "henrique",
+      "simao"
+    ],
+    "group_name": "equipa ssi",
+    "group_id": "group-equipa-ssi"
+  },
+  {
+    "message_id": "67fcfef3-e74a-4bb3-a417-57dbc24e3645",
+    "timestamp": "2026-04-30T16:03:49.150809+00:00",
+    "from": "henrique",
+    "to": "simao",
+    "payload": {
+      "nonce": "c8SC2FaYdjMxu9MC",
+      "ciphertext": "ZOCcOFHDuaAj2OaIkhKvUu5oCmA=",
+      "encrypted_key": "DGPK/X7tuiCLKkt9J5RC+4KdJw7+6HxbcxyMIP078giHCBkRVxsllPAuwtxXFmUBcPZBh4I+dfqalfYDQRiZ4croHl24dbunwucZGgmcjAQ4yWh0hQmYkFi4eR4PnqIJgQhxACYDB/xe1LzYFecO6Y/ENtKjFAuNv0VBQGoZyXU5vjePWse21qeKMvehyXWeNT0xxYLpn8QjFT7HTpe/W0JdK0CyxN76wLSubKcKRE1EM3Ne/xU0NwCchHq2zQdbQrh2MIaoYbIL5dowahfcnqmyI9bd/3vbbTv1mCkE7KTxYCkZaAIa2Y1C7Ytbbp+z2vEDJPPROYAluyum2K2Cuw=="
+    },
+    "signature": "vrLRpnRfaM1wAvvrCI6MwuIKBNYftP3SXq8/HWNyrlI2U/EHaYSC8B2MVytCZnmRdtkubaNYyDojCE9c4UQRKNI+THlHucjm86yrku0nvcxZPlS54Fd8VQB7x8zEaFXn9hs3ysB4zkcVzEXTBSWwp5sRzJu8YoGRCdaBwau8PYDgrbPZJQ8pbMlRMQxcqhRu1tawzmk48bWe4ScdAk4r18VwI8BSriuxWXPc3FxEAtxtmdpA1CDRcelOIaXxIkXVfuAiu3/Rx1RB+AMPh4eI4kwACUt7CvudREQALWzkK1MUPCZCBsbP3xpwOZLpJ58hHTHW8qI//H53bkKOBJ9DYA==",
+    "group_members": [
+      "goncalo",
+      "henrique",
+      "simao"
+    ],
+    "group_name": "equipa ssi",
+    "group_id": "group-equipa-ssi"
+  },
+  {
+    "message_id": "23b7df05-b304-41c4-9efb-a2b67355775c",
+    "timestamp": "2026-04-30T16:26:13.159407+00:00",
+    "from": "henrique",
+    "to": "simao",
+    "payload": {
+      "nonce": "J4dyng0uvwTiwSBT",
+      "ciphertext": "FZtlmbPkGrga77PdmZ0WThsglY1N9NcMrA==",
+      "encrypted_key": "CHqDnHziEg/KHXadpDCSeqrqno5Bs5zGMX/Y5i5V8uQ7cvbtiT61hRUinvQigHgqG3rPfXU2uB15TQDDKIsSqkbSm93on73LxGhOhuL+4jfavfEm2gwU4QpFPzBobJUi17yRQlVQU8T2Z5XDBpqlv2ORpcZH+mM/V0p4v+Vug2dgb4ZG/Yzk1nDwL1S8xIjsDH5JmhCjIJFwA+yx06BxDBG0RRZD2mZJzSijbmvnklkueb2jDeoDHRq6FIv05tmkt9NkDqFLAk/DWUA8Auefpg50YJMlFhiDdEbsXROtFiL22Hs2w9q4RqEU1xh2GI1p+QmpRboe7MzYvEWKv+7w7w=="
+    },
+    "signature": "kL3h6d/Yq2IB9QwVhDAYmmTg/Dn2lsvxe6W7iOY8fkLMlkph5AxZyvEKBoDrNMpyaRdQj3fnkJ86FbR1LuqpVLU8RZEGf0zrPWcySiqr9UbAxlRpxMP/U7KJ+/nc42dvpxB6dPMOvIznh0XXIZSPyQmZIxs+J/WyobGkTBQ4M1hsQrNisSOYUJMy6dplrYj5LrxRpo9DrV9dahYtZeiRHNJonIlVf38LfdG3U7wVGC7nZd3mKwdjTLbav82wuMOStKGVX9OyD1lX5qTP4Mfg77y56dpHfyYYyNexee5yGr/b+Ldu6dcomgucPqs+gadMeOJNuaRYxbfO99TvOXhCMw==",
+    "group_name": "equipa ssi",
+    "group_members": [
+      "goncalo",
+      "henrique",
+      "simao"
+    ],
+    "group_id": "group-equipa-ssi"
+  },
+  {
+    "message_id": "a30db952-4f78-47cd-8fc7-47eef85c8ede",
+    "timestamp": "2026-04-30T16:53:28.034079+00:00",
+    "from": "goncalo",
+    "to": "henrique",
+    "payload": {
+      "nonce": "w+9Dj/Smcta2lbAk",
+      "ciphertext": "F2bG4/GvAAx183NoQlc/1Xkf1ObENkXoO3JYCV8cm3y0mzlRZURexqL+3y8zUCjnyUZgefIGiNQ=",
+      "encrypted_key": "VN5mrylavnzpMo/qd81+9E/c5+2AiDynXZ4e0X3xdUF6LTR3Y84/s7yYTS87t/6xIjaSUQZUZnzia/5z7zXonvxOqeSUsGLoxhpCKr0p2XTpwt9wLlj6SvdaQiTdQ8XHnd6y9G5Goj52s4XX/TSfnwupRP3eORy/YX5OygtSmoBzUHaB0aOi2Am5pmUKW/m3VNhQC3V1eCV3scg3zXi1xkv4BHypJCOPrW2UPZXl6Sj1VDIjwie5vEtMdZC+CkFqHWOIT6IRAD/aJ89MwCcVhxprjkKjS4Y8AICPpM5xw/QK9kAwm+kfz2wh+yevYRKR+JT3ykMbp/y+gXujzP/AEQ=="
+    },
+    "signature": "EHiuQiTRwtUdc5/523z3Uw0vB4RXjKE5gNrK2TQklKaaJRoOkqkz7qTMCtCHT+xHdQN+a4lhc/wPWpjcpj0zpFj0F2Dp14XJlnTAr5s8ByxZ5qJEvBsvq6SD6pjLaPzxHGyva/gcMqiIE9pwPQcnig/XVYOcVMRmm75yRMA7v1bUABVA+XXEJrZn60iZ+XRljzAatAaDLXe/KUJrN3mh51qMA7s6IfIK/hBp2s74rdZRSjrRC/aJlwClTp8mPXlQsBjU/bRXcxk5Ve/IVJf5lLkd88fpEsLONTuYOhMZePNrEh0EmJX093weo7awBHAM5oIoDdJMOI1ixNJF1tYdmw==",
+    "group_members": [
+      "goncalo",
+      "henrique",
+      "simao"
+    ],
+    "group_id": "group-equipa-ssi",
+    "group_name": "equipa ssi",
+    "group_action": "delete"
+  },
+  {
+    "message_id": "8c9fb1b8-9f57-44e3-a09c-d75fee35bdb4",
+    "timestamp": "2026-04-30T16:53:28.041003+00:00",
+    "from": "goncalo",
+    "to": "simao",
+    "payload": {
+      "nonce": "kqw5a4c8XQeOl1KL",
+      "ciphertext": "agL3lJE/Su+qnwXJwW+K6Z0e2X0lNQ8Mxvvt3XUNG/gVvhovXycRjx27onVsz4DgrWeuqtohids=",
+      "encrypted_key": "ejJhn+hKJoe2LZDcDvyuJPLg3HIbzJzlEvKZRtJPECGJBYNH+DwZzk9Kf1aJwbsuMP6dSYUIg/oIEMpI5OKgdakYyJxYXq8zBcz+JyV1D9l43tfZnwfX3tkEeiNm2af1m3+SbrK3F/s/ziy2vIqXbkQrruUQzc/9s+eWdRthNYnxOF99jCtkxOCEMRuXnKFRP7uv8+fKy5VXE7MOQD7hrC7nE7fonbXA8t7UzI/PCQY4nEJ7skvpj6MftX9Ul2spEfz+c6EE+oY1qcmPImAKog84wsKWscPjZA+qMzV8LLhQBl24UQ2gRJgH3i28MmuC7kLFyenGPFaPnj0aF1qiew=="
+    },
+    "signature": "AlgqcATPP7xmwYmbaqIIKzGWz6t9W8hw3++vuH9RJWVxLsKLnS3VegtnThS9cf5pde4sY0NlvhMCdvIRILCHVmWvWZAHfeGd2/42fWhsC20twx4YJnRtckt/VADz2y/HaDb1uHmk1WAaihYglX66PmrjciJLNMrkjSMPAVplrfvi8d9d7cPcAzKdJ2zc2jGYJ4nT8/k/Y6Utn5+0v7TxH2iB2oyCqrOPxaIbsMxEdqemQCsfNhuofPhFVerTSaOt7YhZ3oPEOaN+4cqmhGEu7sRLPASlIu07SbXEz/l604B3gX94lrfyarCHDqB2YzFs/6QYRJm/jzE5ptx2oAjv9w==",
+    "group_members": [
+      "goncalo",
+      "henrique",
+      "simao"
+    ],
+    "group_id": "group-equipa-ssi",
+    "group_name": "equipa ssi",
+    "group_action": "delete"
   }
 ]
