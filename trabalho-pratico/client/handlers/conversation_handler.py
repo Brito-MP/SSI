@@ -1,5 +1,28 @@
 def save_to_history(state, msg, plaintext):
-    peer = msg["from"] if msg["from"] != state.username else msg["to"]
+    if msg.get("group_id"):
+        peer = msg["group_id"]
+        group_name = msg.get("group_name", peer)
+        members = msg.get("group_members", [])
+        if isinstance(members, list):
+            clean_members = sorted({m.strip() for m in members if isinstance(m, str) and m.strip()})
+        else:
+            clean_members = []
+        if peer not in state.groups:
+            state.groups[peer] = {
+                "name": group_name,
+                "members": clean_members,
+            }
+            state.groups_dirty = True
+        else:
+            group = state.groups[peer]
+            if not group.get("members") and clean_members:
+                group["members"] = clean_members
+                state.groups_dirty = True
+            if group.get("name") in {None, "", peer} and group_name != peer:
+                group["name"] = group_name
+                state.groups_dirty = True
+    else:
+        peer = msg["from"] if msg["from"] != state.username else msg["to"]
 
     record = {
         "message_id": msg["message_id"],
@@ -7,6 +30,8 @@ def save_to_history(state, msg, plaintext):
         "from": msg["from"],
         "to": msg["to"],
         "text": plaintext,
+        "group_id": msg.get("group_id"),
+        "group_name": msg.get("group_name"),
     }
 
     with state.conversations_lock:
@@ -24,22 +49,24 @@ def cmd_conversations(state):
             if not msgs:
                 continue
             last = msgs[-1]
-            summaries.append((last["timestamp"], peer, last["from"], last["text"]))
+            label = state.groups.get(peer, {}).get("name", peer)
+            summaries.append((last["timestamp"], peer, label, last["from"], last["text"]))
 
     if not summaries:
         print("Sem conversas locais.")
         return
 
-    for timestamp, peer, sender, text in sorted(summaries, key=lambda item: item[0], reverse=True):
+    for timestamp, peer, label, sender, text in sorted(summaries, key=lambda item: item[0], reverse=True):
         preview = text if len(text) <= 40 else text[:37] + "..."
-        print(f"{peer} | {timestamp} | {sender}: {preview}")
+        print(f"{label} ({peer}) | {timestamp} | {sender}: {preview}")
 
 
 def cmd_open(state, target):
     with state.conversations_lock:
         msgs = list(state.conversations.get(target, []))
 
-    print(f"--- Conversa com {target} ---")
+    label = state.groups.get(target, {}).get("name", target)
+    print(f"--- Conversa com {label} ---")
 
     if not msgs:
         print(f"Sem histórico local com {target}.")

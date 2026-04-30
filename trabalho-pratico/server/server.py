@@ -12,15 +12,17 @@ from common.secure_channel import (
     load_server_security_context,
     server_handshake,
 )
-from crypto_utils import public_key_from_pem, public_key_to_pem, verify_protected_contacts
+from crypto_utils import public_key_from_pem, public_key_to_pem, verify_protected_contacts, verify_protected_groups
 from protocol import send_json, recv_json
 from storage import (
     PROTECTED_CONTACTS_FIELD,
+    PROTECTED_GROUPS_FIELD,
     load_users,
     save_users,
     load_messages,
     save_messages,
     set_protected_contacts,
+    set_protected_groups,
 )
 
 
@@ -39,6 +41,7 @@ REQUIRED_ENVELOPE_FIELDS = {
     "payload",
     "signature",
 }
+OPTIONAL_ENVELOPE_FIELDS = {"group_id", "group_name", "group_members", "group_action"}
 
 
 # Verifica se a estrutura da mensagem recebida tem o formato esperado.
@@ -70,6 +73,9 @@ def store_encrypted_message(msg: dict):
         "payload": msg["payload"],
         "signature": msg["signature"],
     }
+    for field in OPTIONAL_ENVELOPE_FIELDS:
+        if field in msg:
+            envelope[field] = msg[field]
     messages.append(envelope)
     save_messages(messages)
     return envelope
@@ -88,12 +94,17 @@ def sender_public_key(users: dict, sender: str):
     return users.get(sender, {}).get("public_key")
 
 
+def sender_certificate(users: dict, sender: str):
+    return users.get(sender, {}).get("certificate")
+
+
 def enrich_with_sender_keys(messages, users: dict):
     enriched = []
     for msg in messages:
         enriched.append({
             **msg,
             "sender_public_key": sender_public_key(users, msg["from"]),
+            "sender_certificate": sender_certificate(users, msg["from"]),
         })
     return enriched
 
@@ -170,6 +181,7 @@ def handle_client(conn, addr, security_ctx):
                 user_data["public_key"] = requested_public_key
                 user_data["certificate"] = authenticated_certificate
                 user_data.pop("contacts", None)
+                user_data.pop("groups", None)
                 users[username] = user_data
                 save_users(users)
                 with online_users_lock:
@@ -213,6 +225,7 @@ def handle_client(conn, addr, security_ctx):
                     send_json(target_socket, {
                         "command": "deliver_message",
                         "sender_public_key": sender_pub_key,
+                        "sender_certificate": sender_certificate(users, msg["from"]),
                         **envelope
                     })
 
@@ -281,6 +294,46 @@ def handle_client(conn, addr, security_ctx):
                     "status": "ok",
                     "message": "contactos atualizados",
                     "protected_contacts": user_data[PROTECTED_CONTACTS_FIELD],
+                })
+
+            elif command == "list_groups":
+                users = load_users()
+                user_data = registered_user(users, authenticated_username)
+                if user_data is None:
+                    send_json(conn, {"status": "error", "message": "utilizador não registado"})
+                    continue
+
+                send_json(conn, {
+                    "status": "ok",
+                    "protected_groups": user_data.get(PROTECTED_GROUPS_FIELD),
+                })
+
+            elif command == "update_groups":
+                users = load_users()
+                user_data = registered_user(users, authenticated_username)
+                if user_data is None:
+                    send_json(conn, {"status": "error", "message": "utilizador não registado"})
+                    continue
+
+                protected_groups = msg.get("protected_groups")
+                try:
+                    public_key = public_key_from_pem(user_data["public_key"])
+                except Exception:
+                    send_json(conn, {"status": "error", "message": "chave pública do utilizador inválida"})
+                    continue
+
+                if not verify_protected_groups(protected_groups, authenticated_username, public_key):
+                    send_json(conn, {"status": "error", "message": "grupos protegidos inválidos"})
+                    continue
+
+                set_protected_groups(user_data, protected_groups)
+                users[authenticated_username] = user_data
+                save_users(users)
+
+                send_json(conn, {
+                    "status": "ok",
+                    "message": "grupos atualizados",
+                    "protected_groups": user_data[PROTECTED_GROUPS_FIELD],
                 })
 
             elif command == "list_users":

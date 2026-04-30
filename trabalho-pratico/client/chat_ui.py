@@ -1,7 +1,9 @@
+import shlex
+
 from client_connection import send_request
 from handlers.contact_handler import cmd_add_contact, cmd_contacts, cmd_remove_contact
 from handlers.conversation_handler import cmd_conversations, cmd_open
-from handlers.message_handler import cmd_send, cmd_sync
+from handlers.message_handler import cmd_create_group, cmd_groups, cmd_remove_group, cmd_send, cmd_sync
 
 
 def current_prompt(state):
@@ -15,7 +17,11 @@ def print_main_help():
     print("  contacts")
     print("  add_contact <user>")
     print("  remove_contact <user>")
-    print("  open <user>")
+    print("  groups")
+    print("  create_group \"<nome>\" <user1,user2,...>")
+    print("  remove_group <group_id>")
+    print("  chats")
+    print("  open <user|group_id>")
     print("  conversations")
     print("  sync")
     print("  send <user> <mensagem>  (fallback/debug)")
@@ -78,6 +84,13 @@ def run_ui_loop(state):
         elif cmd == "contacts":
             cmd_contacts(state)
 
+        elif cmd == "groups":
+            cmd_groups(state)
+
+        elif cmd == "chats":
+            cmd_contacts(state)
+            cmd_groups(state)
+
         elif cmd == "add_contact" or cmd.startswith("add_contact "):
             parts = cmd.split(" ", 1)
             if len(parts) < 2 or not parts[1].strip():
@@ -95,6 +108,30 @@ def run_ui_loop(state):
 
             target = parts[1].strip()
             cmd_remove_contact(state, target)
+
+        elif cmd == "create_group" or cmd.startswith("create_group "):
+            try:
+                parts = shlex.split(cmd)
+            except ValueError as exc:
+                print(f"Comando inválido: {exc}")
+                continue
+
+            if len(parts) != 3 or not parts[1].strip() or not parts[2].strip():
+                print("Uso: create_group <nome> <user1,user2,...>")
+                continue
+
+            _, name, members_raw = parts
+            members = [member.strip() for member in members_raw.split(",")]
+            cmd_create_group(state, name, members)
+
+        elif cmd == "remove_group" or cmd.startswith("remove_group "):
+            parts = cmd.split(" ", 1)
+            if len(parts) < 2 or not parts[1].strip():
+                print("Uso: remove_group <group_id>")
+                continue
+
+            group_id = parts[1].strip()
+            cmd_remove_group(state, group_id)
 
         elif cmd == "list":
             cmd_list_users(state)
@@ -120,8 +157,8 @@ def run_ui_loop(state):
                 continue
             target = parts[1].strip()
 
-            if target not in state.contacts:
-                print(f"{target} não está nos teus contactos. Usa add_contact <user>.")
+            if target not in state.contacts and target not in state.groups:
+                print(f"{target} não é contacto nem grupo conhecido.")
                 continue
 
             if cmd_open(state, target):

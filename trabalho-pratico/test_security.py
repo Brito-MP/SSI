@@ -13,7 +13,15 @@ from common.certificates import load_client_certificate
 from common.security import client_username_from_certificate, sign_dh_keys, validate_signature
 
 from common.crypto import encrypt_message, decrypt_message
-from crypto_utils import normalize_contact_list, protect_contacts, public_key_to_pem, unprotect_contacts
+from crypto_utils import (
+    normalize_contact_list,
+    normalize_groups,
+    protect_contacts,
+    protect_groups,
+    public_key_to_pem,
+    unprotect_contacts,
+    unprotect_groups,
+)
 
 
 def generate_rsa_keypair():
@@ -150,6 +158,56 @@ def test_protected_contacts_roundtrip():
     print("OK - contactos protegidos contra leitura e alteração")
 
 
+def test_groups_metadata_normalization():
+    print("\n[TESTE] Normalização de grupos")
+
+    groups = normalize_groups({
+        " group-equipa ": {"name": " Equipa ", "members": ["goncalo", " simao ", "goncalo", ""]},
+        "": {"name": "inválido", "members": ["goncalo"]},
+        "group-invalido": "inválido",
+    })
+
+    assert groups == {
+        "group-equipa": {
+            "name": "Equipa",
+            "members": ["goncalo", "simao"],
+        }
+    }
+    assert normalize_groups("inválido") == {}
+
+    print("OK - grupos normalizados")
+
+
+def test_protected_groups_roundtrip():
+    print("\n[TESTE] Grupos cifrados e assinados")
+
+    priv, pub = generate_rsa_keypair()
+    protected_groups = protect_groups(
+        "henrique",
+        {"group-equipa": {"name": "Equipa", "members": ["goncalo", " simao ", "goncalo"]}},
+        priv,
+        pub,
+    )
+    groups = unprotect_groups(protected_groups, "henrique", priv, pub)
+
+    assert groups == {
+        "group-equipa": {
+            "name": "Equipa",
+            "members": ["goncalo", "simao"],
+        }
+    }
+
+    protected_groups["owner"] = "goncalo"
+    try:
+        unprotect_groups(protected_groups, "goncalo", priv, pub)
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("grupos alterados foram aceites")
+
+    print("OK - grupos protegidos contra leitura e alteração")
+
+
 def run_all():
     print("===== TESTES DE SEGURANÇA =====")
 
@@ -161,6 +219,8 @@ def run_all():
     test_certificate_public_key_binding()
     test_contacts_metadata_normalization()
     test_protected_contacts_roundtrip()
+    test_groups_metadata_normalization()
+    test_protected_groups_roundtrip()
 
     print("\nTODOS OS TESTES PASSARAM")
 
