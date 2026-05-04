@@ -12,7 +12,16 @@ from common.secure_channel import (
     load_server_security_context,
     server_handshake,
 )
-from crypto_utils import public_key_from_pem, public_key_to_pem, verify_protected_contacts, verify_protected_groups
+from crypto_utils import (
+    E2EE_MESSAGE_VERSION,
+    e2ee_public_key_binding_bytes,
+    public_key_from_pem,
+    public_key_to_pem,
+    verify_protected_contacts,
+    verify_protected_groups,
+    verify_signature,
+    x25519_public_key_from_pem,
+)
 from protocol import send_json, recv_json
 from storage import (
     PROTECTED_CONTACTS_FIELD,
@@ -32,7 +41,10 @@ PORT = 9000
 online_users = {}  # username -> socket
 online_users_lock = threading.Lock()
 
-REQUIRED_PAYLOAD_FIELDS = {"nonce", "ciphertext", "encrypted_key"}
+E2EE_PUBLIC_KEY_FIELD = "e2ee_public_key"
+E2EE_PUBLIC_KEY_SIGNATURE_FIELD = "e2ee_public_key_signature"
+REQUIRED_V1_PAYLOAD_FIELDS = {"nonce", "ciphertext", "encrypted_key"}
+REQUIRED_V2_PAYLOAD_FIELDS = {"version", "nonce", "ciphertext", "sender_ephemeral_key"}
 REQUIRED_ENVELOPE_FIELDS = {
     "message_id",
     "timestamp",
@@ -44,15 +56,28 @@ REQUIRED_ENVELOPE_FIELDS = {
 OPTIONAL_ENVELOPE_FIELDS = {"group_id", "group_name", "group_members", "group_action"}
 
 
+def is_valid_payload(payload: dict) -> bool:
+    if not isinstance(payload, dict):
+        return False
+
+    if payload.get("version") == E2EE_MESSAGE_VERSION:
+        return REQUIRED_V2_PAYLOAD_FIELDS.issubset(payload.keys()) and all(
+            isinstance(payload[field], str)
+            for field in ["nonce", "ciphertext", "sender_ephemeral_key"]
+        )
+
+    return REQUIRED_V1_PAYLOAD_FIELDS.issubset(payload.keys()) and all(
+        isinstance(payload[field], str)
+        for field in ["nonce", "ciphertext", "encrypted_key"]
+    )
+
+
 # Verifica se a estrutura da mensagem recebida tem o formato esperado.
 def is_valid_envelope(msg: dict) -> bool:
     if not REQUIRED_ENVELOPE_FIELDS.issubset(msg.keys()):
         return False
 
-    if not isinstance(msg.get("payload"), dict):
-        return False
-
-    if not REQUIRED_PAYLOAD_FIELDS.issubset(msg["payload"].keys()):
+    if not is_valid_payload(msg.get("payload")):
         return False
 
     if not all(isinstance(msg[field], str) for field in ["message_id", "timestamp", "from", "to", "signature"]):
@@ -120,6 +145,22 @@ def canonical_public_key_pem(public_key_pem: str):
     return public_key_to_pem(public_key_from_pem(public_key_pem))
 
 
+def canonical_e2ee_public_key_pem(public_key_pem: str):
+    return public_key_to_pem(x25519_public_key_from_pem(public_key_pem))
+
+
+def can_set_e2ee_public_key(existing_public_key: str | None, requested_public_key: str):
+    requested_public_key = canonical_e2ee_public_key_pem(requested_public_key)
+    if existing_public_key is None:
+        return requested_public_key
+
+    existing_public_key = canonical_e2ee_public_key_pem(existing_public_key)
+    if existing_public_key != requested_public_key:
+        raise ValueError("utilizador já registado com outra chave pública E2EE")
+
+    return requested_public_key
+
+
 def handle_client(conn, addr, security_ctx):
     username = None
     authenticated_username = None
@@ -159,6 +200,31 @@ def handle_client(conn, addr, security_ctx):
                     })
                     continue
 
+                try:
+                    requested_e2ee_public_key = can_set_e2ee_public_key(
+                        None,
+                        msg[E2EE_PUBLIC_KEY_FIELD],
+                    )
+                except KeyError:
+                    send_json(conn, {"status": "error", "message": "chave pública E2EE em falta"})
+                    continue
+                except Exception:
+                    send_json(conn, {"status": "error", "message": "chave pública E2EE inválida"})
+                    continue
+
+                requested_e2ee_public_key_signature = msg.get(E2EE_PUBLIC_KEY_SIGNATURE_FIELD)
+                if not isinstance(requested_e2ee_public_key_signature, str):
+                    send_json(conn, {"status": "error", "message": "assinatura da chave pública E2EE em falta"})
+                    continue
+
+                if not verify_signature(
+                    e2ee_public_key_binding_bytes(username, requested_e2ee_public_key),
+                    requested_e2ee_public_key_signature,
+                    public_key_from_pem(requested_public_key),
+                ):
+                    send_json(conn, {"status": "error", "message": "assinatura da chave pública E2EE inválida"})
+                    continue
+
                 user_data = users.get(username, {})
                 if not isinstance(user_data, dict):
                     user_data = {}
@@ -178,7 +244,22 @@ def handle_client(conn, addr, security_ctx):
                         })
                         continue
 
+                existing_e2ee_public_key = user_data.get(E2EE_PUBLIC_KEY_FIELD)
+                try:
+                    requested_e2ee_public_key = can_set_e2ee_public_key(
+                        existing_e2ee_public_key,
+                        requested_e2ee_public_key,
+                    )
+                except ValueError as exc:
+                    send_json(conn, {"status": "error", "message": str(exc)})
+                    continue
+                except Exception:
+                    send_json(conn, {"status": "error", "message": "chave pública E2EE registada inválida"})
+                    continue
+
                 user_data["public_key"] = requested_public_key
+                user_data[E2EE_PUBLIC_KEY_FIELD] = requested_e2ee_public_key
+                user_data[E2EE_PUBLIC_KEY_SIGNATURE_FIELD] = requested_e2ee_public_key_signature
                 user_data["certificate"] = authenticated_certificate
                 user_data.pop("contacts", None)
                 user_data.pop("groups", None)
@@ -198,6 +279,8 @@ def handle_client(conn, addr, security_ctx):
                         "status": "ok",
                         "target": target,
                         "public_key": users[target]["public_key"],
+                        E2EE_PUBLIC_KEY_FIELD: users[target].get(E2EE_PUBLIC_KEY_FIELD),
+                        E2EE_PUBLIC_KEY_SIGNATURE_FIELD: users[target].get(E2EE_PUBLIC_KEY_SIGNATURE_FIELD),
                         "certificate": users[target].get("certificate"),
                     })
 

@@ -3,9 +3,13 @@ import json
 import base64
 import uuid
 from datetime import datetime, timezone
-from cryptography.hazmat.primitives.asymmetric import rsa, padding
+from cryptography.hazmat.primitives.asymmetric import rsa, padding, x25519
 from cryptography.hazmat.primitives import serialization, hashes
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+from cryptography.hazmat.primitives.kdf.hkdf import HKDF
+
+
+E2EE_MESSAGE_VERSION = 2
 
 
 def generate_rsa_keypair():
@@ -13,6 +17,12 @@ def generate_rsa_keypair():
         public_exponent=65537,
         key_size=2048
     )
+    public_key = private_key.public_key()
+    return private_key, public_key
+
+
+def generate_x25519_keypair():
+    private_key = x25519.X25519PrivateKey.generate()
     public_key = private_key.public_key()
     return private_key, public_key
 
@@ -64,6 +74,30 @@ def public_key_from_pem(pem: str):
     return serialization.load_pem_public_key(pem.encode())
 
 
+def x25519_public_key_from_pem(pem: str):
+    public_key = public_key_from_pem(pem)
+    if not isinstance(public_key, x25519.X25519PublicKey):
+        raise TypeError("chave pública E2EE não é X25519")
+    return public_key
+
+
+def _x25519_public_raw(public_key) -> bytes:
+    return public_key.public_bytes(
+        encoding=serialization.Encoding.Raw,
+        format=serialization.PublicFormat.Raw,
+    )
+
+
+def _derive_e2ee_v2_key(shared_secret: bytes, sender_ephemeral_key: bytes, recipient_static_key: bytes) -> bytes:
+    hkdf = HKDF(
+        algorithm=hashes.SHA256(),
+        length=32,
+        salt=None,
+        info=b"ssi-chat-e2ee-v2" + sender_ephemeral_key + recipient_static_key,
+    )
+    return hkdf.derive(shared_secret)
+
+
 # Cifra uma mensagem para um destinatário específico.
 # Gera uma chave AES aleatória para esta mensagem, cifra o texto com AES-GCM
 # e encapsula a chave AES com a chave pública RSA do destinatário.
@@ -90,8 +124,31 @@ def encrypt_for_recipient(plaintext: str, recipient_public_key):
     }
 
 
+def encrypt_for_recipient_v2(plaintext: str, recipient_x25519_public_key):
+    if not isinstance(recipient_x25519_public_key, x25519.X25519PublicKey):
+        raise TypeError("chave pública do destinatário não é X25519")
+
+    sender_ephemeral_private_key, sender_ephemeral_public_key = generate_x25519_keypair()
+    sender_ephemeral_raw = _x25519_public_raw(sender_ephemeral_public_key)
+    recipient_static_raw = _x25519_public_raw(recipient_x25519_public_key)
+
+    shared_secret = sender_ephemeral_private_key.exchange(recipient_x25519_public_key)
+    aes_key = _derive_e2ee_v2_key(shared_secret, sender_ephemeral_raw, recipient_static_raw)
+
+    aesgcm = AESGCM(aes_key)
+    nonce = os.urandom(12)
+    ciphertext = aesgcm.encrypt(nonce, plaintext.encode(), None)
+
+    return {
+        "version": E2EE_MESSAGE_VERSION,
+        "sender_ephemeral_key": base64.b64encode(sender_ephemeral_raw).decode(),
+        "nonce": base64.b64encode(nonce).decode(),
+        "ciphertext": base64.b64encode(ciphertext).decode(),
+    }
+
+
 # Decifra uma mensagem recebida por este utilizador.
-def decrypt_from_sender(payload: dict, recipient_private_key) -> str:
+def decrypt_from_sender_v1(payload: dict, recipient_private_key) -> str:
     encrypted_key = base64.b64decode(payload["encrypted_key"])
     nonce = base64.b64decode(payload["nonce"])
     ciphertext = base64.b64decode(payload["ciphertext"])
@@ -108,6 +165,31 @@ def decrypt_from_sender(payload: dict, recipient_private_key) -> str:
     aesgcm = AESGCM(aes_key)
     plaintext = aesgcm.decrypt(nonce, ciphertext, None)
     return plaintext.decode()
+
+
+def decrypt_from_sender_v2(payload: dict, recipient_x25519_private_key) -> str:
+    if not isinstance(recipient_x25519_private_key, x25519.X25519PrivateKey):
+        raise TypeError("chave privada E2EE não é X25519")
+
+    sender_ephemeral_raw = base64.b64decode(payload["sender_ephemeral_key"])
+    nonce = base64.b64decode(payload["nonce"])
+    ciphertext = base64.b64decode(payload["ciphertext"])
+
+    sender_ephemeral_public_key = x25519.X25519PublicKey.from_public_bytes(sender_ephemeral_raw)
+    recipient_static_raw = _x25519_public_raw(recipient_x25519_private_key.public_key())
+    shared_secret = recipient_x25519_private_key.exchange(sender_ephemeral_public_key)
+    aes_key = _derive_e2ee_v2_key(shared_secret, sender_ephemeral_raw, recipient_static_raw)
+
+    aesgcm = AESGCM(aes_key)
+    plaintext = aesgcm.decrypt(nonce, ciphertext, None)
+    return plaintext.decode()
+
+
+# Decifra uma mensagem recebida por este utilizador.
+def decrypt_from_sender(payload: dict, recipient_private_key, recipient_x25519_private_key=None) -> str:
+    if payload.get("version") == E2EE_MESSAGE_VERSION:
+        return decrypt_from_sender_v2(payload, recipient_x25519_private_key)
+    return decrypt_from_sender_v1(payload, recipient_private_key)
 
 
 # Assina dados com a chave privada do remetente.
@@ -144,6 +226,15 @@ def verify_signature(data: bytes, signature_b64: str, public_key) -> bool:
 # Serializa um dicionário sempre da mesma maneira antes de assinar/verificar.
 def canonical_message_bytes(message_dict: dict) -> bytes:
     return json.dumps(message_dict, sort_keys=True, separators=(",", ":")).encode()
+
+
+def e2ee_public_key_binding_bytes(username: str, e2ee_public_key_pem: str) -> bytes:
+    return canonical_message_bytes({
+        "type": "e2ee_public_key",
+        "version": 1,
+        "username": username,
+        "e2ee_public_key": e2ee_public_key_pem,
+    })
 
 
 def normalize_contact_list(contacts):

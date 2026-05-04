@@ -9,7 +9,9 @@ if str(ROOT_DIR) not in sys.path:
 from crypto_utils import (
     canonical_message_bytes,
     decrypt_from_sender,
+    e2ee_public_key_binding_bytes,
     encrypt_for_recipient,
+    encrypt_for_recipient_v2,
     generate_message_id,
     normalize_groups,
     protect_groups,
@@ -19,6 +21,7 @@ from crypto_utils import (
     unprotect_groups,
     utc_timestamp,
     verify_signature,
+    x25519_public_key_from_pem,
 )
 from client_connection import send_request
 from common.certificates import certificate_from_pem, load_ca_certificate
@@ -36,8 +39,24 @@ def group_id_from_name(name: str):
     return f"group-{slug}"
 
 
-def build_message_envelope(my_username, target, text, my_private_key, target_public_key, group=None, group_action=None):
-    payload = encrypt_for_recipient(text, target_public_key)
+def _identity_key(recipient_keys):
+    if isinstance(recipient_keys, dict):
+        return recipient_keys.get("identity_public_key")
+    return recipient_keys
+
+
+def _e2ee_key(recipient_keys):
+    if isinstance(recipient_keys, dict):
+        return recipient_keys.get("e2ee_public_key")
+    return None
+
+
+def build_message_envelope(my_username, target, text, my_private_key, recipient_keys, group=None, group_action=None):
+    target_e2ee_public_key = _e2ee_key(recipient_keys)
+    if target_e2ee_public_key is not None:
+        payload = encrypt_for_recipient_v2(text, target_e2ee_public_key)
+    else:
+        payload = encrypt_for_recipient(text, _identity_key(recipient_keys))
 
     envelope_to_sign = {
         "message_id": generate_message_id(),
@@ -111,7 +130,7 @@ def process_incoming_message(msg, state):
         return
 
     try:
-        plaintext = decrypt_from_sender(msg["payload"], state.private_key)
+        plaintext = decrypt_from_sender(msg["payload"], state.private_key, state.x25519_private_key)
     except Exception as exc:
         print(f"[AVISO] não foi possível decifrar a mensagem {msg.get('message_id')}: {exc}")
         return
@@ -156,8 +175,11 @@ def handle_group_delete_message(state, msg, plaintext):
 
 def get_user_key(state, target):
     with state.key_cache_lock:
-        if target in state.key_cache:
-            return state.key_cache[target]
+        if target in state.key_cache and target in state.e2ee_key_cache:
+            return {
+                "identity_public_key": state.key_cache[target],
+                "e2ee_public_key": state.e2ee_key_cache.get(target),
+            }
 
     resp = send_request(
         state.sock,
@@ -197,13 +219,30 @@ def get_user_key(state, target):
         if received_key_pem != cert_key_pem:
             print(f"Chave pública de {target} não corresponde ao certificado.")
             return None
+
+        e2ee_key = None
+        e2ee_key_pem = resp.get("e2ee_public_key")
+        if isinstance(e2ee_key_pem, str):
+            e2ee_signature = resp.get("e2ee_public_key_signature")
+            if not isinstance(e2ee_signature, str):
+                print(f"Assinatura da chave pública E2EE de {target} em falta.")
+                return None
+            if not verify_signature(e2ee_public_key_binding_bytes(target, e2ee_key_pem), e2ee_signature, key):
+                print(f"Assinatura da chave pública E2EE de {target} inválida.")
+                return None
+            e2ee_key = x25519_public_key_from_pem(e2ee_key_pem)
     except Exception as exc:
         print(f"Erro ao validar chave pública de {target}: {exc}")
         return None
 
     with state.key_cache_lock:
         state.key_cache[target] = key
-    return key
+        if e2ee_key is not None:
+            state.e2ee_key_cache[target] = e2ee_key
+    return {
+        "identity_public_key": key,
+        "e2ee_public_key": e2ee_key,
+    }
 
 
 def sync_groups(state):
@@ -346,7 +385,7 @@ def cmd_create_group(state, name, members):
 
     missing_contacts = [member for member in clean_members if member not in state.contacts]
     if missing_contacts:
-        print("Só podes criar grupos com contactos:", ", ".join(missing_contacts))
+        print("Não podes criar grupos com o(s) contacto(s):", ", ".join(missing_contacts))
         return
 
     for member in clean_members:

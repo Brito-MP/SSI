@@ -6,6 +6,7 @@ python3 test_security.py
 """
 
 import os
+import copy
 from cryptography.hazmat.primitives.asymmetric import rsa
 
 from common.key_exchange import derive_session_key
@@ -14,14 +15,22 @@ from common.security import client_username_from_certificate, sign_dh_keys, vali
 
 from common.crypto import encrypt_message, decrypt_message
 from crypto_utils import (
+    decrypt_from_sender,
+    e2ee_public_key_binding_bytes,
+    encrypt_for_recipient,
+    encrypt_for_recipient_v2,
+    generate_x25519_keypair,
     normalize_contact_list,
     normalize_groups,
     protect_contacts,
     protect_groups,
     public_key_to_pem,
+    sign_message,
     unprotect_contacts,
     unprotect_groups,
+    verify_signature,
 )
+from server.server import can_set_e2ee_public_key
 
 
 def generate_rsa_keypair():
@@ -127,6 +136,114 @@ def test_certificate_public_key_binding():
     print("OK - chave pública corresponde ao certificado")
 
 
+def test_e2ee_v2_roundtrip():
+    print("\n[TESTE] Mensagem E2EE v2 com X25519 efémero")
+
+    rsa_priv, _ = generate_rsa_keypair()
+    recipient_x25519_priv, recipient_x25519_pub = generate_x25519_keypair()
+
+    payload = encrypt_for_recipient_v2("segredo com forward secrecy", recipient_x25519_pub)
+    plaintext = decrypt_from_sender(payload, rsa_priv, recipient_x25519_priv)
+
+    assert payload["version"] == 2
+    assert "sender_ephemeral_key" in payload
+    assert "encrypted_key" not in payload
+    assert plaintext == "segredo com forward secrecy"
+
+    print("OK - mensagem v2 cifra e decifra")
+
+
+def test_e2ee_v2_fresh_ephemeral_keys():
+    print("\n[TESTE] Mensagens E2EE v2 usam chaves efémeras novas")
+
+    _, recipient_x25519_pub = generate_x25519_keypair()
+
+    payload1 = encrypt_for_recipient_v2("mesmo texto", recipient_x25519_pub)
+    payload2 = encrypt_for_recipient_v2("mesmo texto", recipient_x25519_pub)
+
+    assert payload1["sender_ephemeral_key"] != payload2["sender_ephemeral_key"]
+    assert payload1["ciphertext"] != payload2["ciphertext"]
+
+    print("OK - mensagens iguais geram material criptográfico diferente")
+
+
+def test_e2ee_v2_tamper_detection():
+    print("\n[TESTE] Mensagem E2EE v2 deteta adulteração")
+
+    rsa_priv, _ = generate_rsa_keypair()
+    recipient_x25519_priv, recipient_x25519_pub = generate_x25519_keypair()
+    _, attacker_x25519_pub = generate_x25519_keypair()
+    payload = encrypt_for_recipient_v2("não alterar", recipient_x25519_pub)
+
+    bad_ephemeral = copy.deepcopy(payload)
+    bad_ephemeral["sender_ephemeral_key"] = public_key_to_pem(attacker_x25519_pub)
+    try:
+        decrypt_from_sender(bad_ephemeral, rsa_priv, recipient_x25519_priv)
+    except Exception:
+        pass
+    else:
+        raise AssertionError("sender_ephemeral_key adulterada foi aceite")
+
+    bad_ciphertext = copy.deepcopy(payload)
+    bad_ciphertext["ciphertext"] = payload["ciphertext"][:-4] + "AAAA"
+    try:
+        decrypt_from_sender(bad_ciphertext, rsa_priv, recipient_x25519_priv)
+    except Exception:
+        pass
+    else:
+        raise AssertionError("ciphertext adulterado foi aceite")
+
+    print("OK - adulteração bloqueada")
+
+
+def test_e2ee_v1_compatibility():
+    print("\n[TESTE] Compatibilidade com mensagens E2EE v1")
+
+    rsa_priv, rsa_pub = generate_rsa_keypair()
+    payload = encrypt_for_recipient("mensagem antiga", rsa_pub)
+    plaintext = decrypt_from_sender(payload, rsa_priv)
+
+    assert "version" not in payload
+    assert plaintext == "mensagem antiga"
+
+    print("OK - mensagens v1 continuam suportadas")
+
+
+def test_e2ee_public_key_binding_signature():
+    print("\n[TESTE] Assinatura da chave pública E2EE")
+
+    identity_priv, identity_pub = generate_rsa_keypair()
+    _, e2ee_pub = generate_x25519_keypair()
+    e2ee_public_key_pem = public_key_to_pem(e2ee_pub)
+    signature = sign_message(e2ee_public_key_binding_bytes("henrique", e2ee_public_key_pem), identity_priv)
+
+    assert verify_signature(e2ee_public_key_binding_bytes("henrique", e2ee_public_key_pem), signature, identity_pub)
+    assert not verify_signature(e2ee_public_key_binding_bytes("simao", e2ee_public_key_pem), signature, identity_pub)
+
+    print("OK - chave E2EE fica vinculada ao username/chave de identidade")
+
+
+def test_e2ee_public_key_overwrite_rejected():
+    print("\n[TESTE] Rejeitar alteração de chave pública E2EE registada")
+
+    _, first_pub = generate_x25519_keypair()
+    _, second_pub = generate_x25519_keypair()
+    first_pem = public_key_to_pem(first_pub)
+    second_pem = public_key_to_pem(second_pub)
+
+    assert can_set_e2ee_public_key(None, first_pem) == first_pem
+    assert can_set_e2ee_public_key(first_pem, first_pem) == first_pem
+
+    try:
+        can_set_e2ee_public_key(first_pem, second_pem)
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("alteração de chave pública E2EE foi aceite")
+
+    print("OK - overwrite indevido rejeitado")
+
+
 def test_contacts_metadata_normalization():
     print("\n[TESTE] Normalização de contactos")
 
@@ -217,6 +334,12 @@ def run_all():
     test_session_key()
     test_certificate_username_binding()
     test_certificate_public_key_binding()
+    test_e2ee_v2_roundtrip()
+    test_e2ee_v2_fresh_ephemeral_keys()
+    test_e2ee_v2_tamper_detection()
+    test_e2ee_v1_compatibility()
+    test_e2ee_public_key_binding_signature()
+    test_e2ee_public_key_overwrite_rejected()
     test_contacts_metadata_normalization()
     test_protected_contacts_roundtrip()
     test_groups_metadata_normalization()

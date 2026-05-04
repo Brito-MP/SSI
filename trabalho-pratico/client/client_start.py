@@ -10,7 +10,7 @@ from common.secure_channel import (
     client_handshake,
     load_client_security_context,
 )
-from crypto_utils import public_key_to_pem
+from crypto_utils import e2ee_public_key_binding_bytes, public_key_to_pem, sign_message
 from handlers.contact_handler import sync_contacts
 from handlers.message_handler import sync_groups, update_groups
 
@@ -44,6 +44,7 @@ def main():
     )
     listener.start()
 
+    e2ee_public_key_pem = public_key_to_pem(state.x25519_public_key)
     register_resp = send_request(
         state.sock,
         state.response_queue,
@@ -52,6 +53,11 @@ def main():
             "command": "register",
             "username": state.username,
             "public_key": public_key_to_pem(state.public_key),
+            "e2ee_public_key": e2ee_public_key_pem,
+            "e2ee_public_key_signature": sign_message(
+                e2ee_public_key_binding_bytes(state.username, e2ee_public_key_pem),
+                state.private_key,
+            ),
         },
     )
 
