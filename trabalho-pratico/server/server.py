@@ -88,8 +88,7 @@ def is_valid_envelope(msg: dict) -> bool:
 
 # Guarda uma mensagem offline para o destinatário.
 # O conteúdo já vem cifrado do cliente; o servidor só persiste e encaminha.
-def store_encrypted_message(msg: dict):
-    messages = load_messages()
+def build_envelope(msg: dict):
     envelope = {
         "message_id": msg["message_id"],
         "timestamp": msg["timestamp"],
@@ -101,9 +100,46 @@ def store_encrypted_message(msg: dict):
     for field in OPTIONAL_ENVELOPE_FIELDS:
         if field in msg:
             envelope[field] = msg[field]
+    return envelope
+
+
+def store_encrypted_message(msg: dict, envelope: dict | None = None):
+    messages = load_messages()
+    if envelope is None:
+        envelope = build_envelope(msg)
     messages.append(envelope)
     save_messages(messages)
     return envelope
+
+
+def remove_online_user_if_socket(username: str, sock):
+    with online_users_lock:
+        if online_users.get(username) is sock:
+            del online_users[username]
+
+
+def deliver_or_store_message(msg: dict, users: dict):
+    envelope = build_envelope(msg)
+    target = msg["to"]
+
+    with online_users_lock:
+        target_socket = online_users.get(target)
+
+    if target_socket is not None:
+        try:
+            send_json(target_socket, {
+                "command": "deliver_message",
+                "sender_public_key": sender_public_key(users, msg["from"]),
+                "sender_certificate": sender_certificate(users, msg["from"]),
+                **envelope,
+            })
+        except OSError:
+            remove_online_user_if_socket(target, target_socket)
+        else:
+            return envelope, True, False
+
+    store_encrypted_message(msg, envelope)
+    return envelope, False, True
 
 
 # Entrega mensagens pendentes de um utilizador e remove-as da fila offline.
@@ -299,24 +335,14 @@ def handle_client(conn, addr, security_ctx):
                     send_json(conn, {"status": "error", "message": "remetente inconsistente com a sessão"})
                     continue
 
-                envelope = store_encrypted_message(msg)
-                sender_pub_key = sender_public_key(users, msg["from"])
-
-                with online_users_lock:
-                    target_socket = online_users.get(msg["to"])
-                if target_socket:
-                    send_json(target_socket, {
-                        "command": "deliver_message",
-                        "sender_public_key": sender_pub_key,
-                        "sender_certificate": sender_certificate(users, msg["from"]),
-                        **envelope
-                    })
+                envelope, delivered_online, stored_encrypted = deliver_or_store_message(msg, users)
 
                 send_json(conn, {
                     "status": "ok",
                     "message": "mensagem enviada",
                     "message_id": envelope["message_id"],
-                    "stored_encrypted": True,
+                    "stored_encrypted": stored_encrypted,
+                    "delivered_online": delivered_online,
                 })
 
             elif command == "fetch_messages":
@@ -437,7 +463,7 @@ def handle_client(conn, addr, security_ctx):
     finally:
         if username:
             with online_users_lock:
-                if username in online_users:
+                if online_users.get(username) is conn:
                     del online_users[username]
         conn.close()
 

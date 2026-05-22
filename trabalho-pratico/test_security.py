@@ -7,7 +7,10 @@ python3 test_security.py
 
 import os
 import copy
+import json
 import sys
+import tempfile
+from contextlib import contextmanager
 from pathlib import Path
 from cryptography.hazmat.primitives.asymmetric import rsa
 
@@ -23,6 +26,7 @@ from common.crypto import encrypt_message, decrypt_message
 from chat_state import ChatState
 from handlers.conversation_handler import save_to_history
 from handlers.message_handler import process_incoming_message
+import storage
 from crypto_utils import (
     decrypt_from_sender,
     e2ee_public_key_binding_bytes,
@@ -39,7 +43,13 @@ from crypto_utils import (
     unprotect_groups,
     verify_signature,
 )
-from server.server import can_set_e2ee_public_key
+from server.server import (
+    can_set_e2ee_public_key,
+    deliver_or_store_message,
+    online_users,
+    online_users_lock,
+    pop_pending_messages,
+)
 
 
 def generate_rsa_keypair():
@@ -72,6 +82,76 @@ def history_message(message_id=None, sender="bob", target="alice"):
     if message_id is not None:
         msg["message_id"] = message_id
     return msg
+
+
+def server_users():
+    return {
+        "alice": {
+            "public_key": "alice-public-key",
+            "certificate": "alice-certificate",
+        },
+        "bob": {
+            "public_key": "bob-public-key",
+            "certificate": "bob-certificate",
+        },
+    }
+
+
+def server_message(message_id="server-msg-1", target="bob", group=False):
+    msg = {
+        "message_id": message_id,
+        "timestamp": "2026-05-22T18:00:00Z",
+        "from": "alice",
+        "to": target,
+        "payload": {
+            "nonce": "nonce",
+            "ciphertext": "ciphertext",
+            "encrypted_key": "encrypted-key",
+        },
+        "signature": "signature",
+    }
+    if group:
+        msg.update({
+            "group_id": "group-equipa",
+            "group_name": "Equipa",
+            "group_members": ["alice", "bob"],
+        })
+    return msg
+
+
+class FakeSocket:
+    def __init__(self, fail=False):
+        self.fail = fail
+        self.sent = []
+
+    def sendall(self, data):
+        if self.fail:
+            raise OSError("socket morto")
+        self.sent.append(data)
+
+
+def clear_online_users():
+    with online_users_lock:
+        online_users.clear()
+
+
+@contextmanager
+def temporary_messages_file():
+    old_messages_file = storage.MESSAGES_FILE
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        storage.MESSAGES_FILE = os.path.join(tmp_dir, "messages.json")
+        storage.save_messages([])
+        clear_online_users()
+        try:
+            yield
+        finally:
+            clear_online_users()
+            storage.MESSAGES_FILE = old_messages_file
+
+
+def decode_sent_json(sock):
+    assert len(sock.sent) == 1
+    return json.loads(sock.sent[0].decode("utf-8").strip())
 
 
 def test_encryption():
@@ -274,6 +354,108 @@ def test_e2ee_public_key_overwrite_rejected():
     print("OK - overwrite indevido rejeitado")
 
 
+def test_server_stores_message_when_recipient_offline():
+    print("\n[TESTE] Servidor guarda mensagem quando destinatário está offline")
+
+    with temporary_messages_file():
+        msg = server_message("offline-1")
+        envelope, delivered_online, stored_encrypted = deliver_or_store_message(msg, server_users())
+
+        assert not delivered_online
+        assert stored_encrypted
+        assert storage.load_messages() == [envelope]
+        assert envelope["message_id"] == "offline-1"
+
+    print("OK - mensagem offline guardada")
+
+
+def test_server_delivers_online_without_storing_pending():
+    print("\n[TESTE] Servidor entrega online sem guardar pendente")
+
+    with temporary_messages_file():
+        target_socket = FakeSocket()
+        with online_users_lock:
+            online_users["bob"] = target_socket
+
+        envelope, delivered_online, stored_encrypted = deliver_or_store_message(
+            server_message("online-1"),
+            server_users(),
+        )
+        delivered = decode_sent_json(target_socket)
+
+        assert delivered_online
+        assert not stored_encrypted
+        assert storage.load_messages() == []
+        assert delivered["command"] == "deliver_message"
+        assert delivered["sender_public_key"] == "alice-public-key"
+        assert delivered["sender_certificate"] == "alice-certificate"
+        assert delivered["message_id"] == envelope["message_id"]
+
+    print("OK - mensagem online não ficou pendente")
+
+
+def test_server_fetch_after_online_delivery_is_empty():
+    print("\n[TESTE] Sync não devolve mensagem já entregue online")
+
+    with temporary_messages_file():
+        target_socket = FakeSocket()
+        with online_users_lock:
+            online_users["bob"] = target_socket
+
+        deliver_or_store_message(server_message("online-sync-1"), server_users())
+
+        assert pop_pending_messages("bob") == []
+        assert storage.load_messages() == []
+
+    print("OK - sync pós-entrega online vazio")
+
+
+def test_server_stores_offline_when_online_socket_fails():
+    print("\n[TESTE] Servidor guarda offline se socket online falhar")
+
+    with temporary_messages_file():
+        target_socket = FakeSocket(fail=True)
+        with online_users_lock:
+            online_users["bob"] = target_socket
+
+        envelope, delivered_online, stored_encrypted = deliver_or_store_message(
+            server_message("fallback-1"),
+            server_users(),
+        )
+
+        assert not delivered_online
+        assert stored_encrypted
+        assert storage.load_messages() == [envelope]
+        with online_users_lock:
+            assert "bob" not in online_users
+
+    print("OK - falha de socket caiu para offline")
+
+
+def test_server_group_message_delivery_keeps_group_fields():
+    print("\n[TESTE] Servidor mantém campos de grupo na entrega online")
+
+    with temporary_messages_file():
+        target_socket = FakeSocket()
+        with online_users_lock:
+            online_users["bob"] = target_socket
+
+        envelope, delivered_online, stored_encrypted = deliver_or_store_message(
+            server_message("group-online-1", group=True),
+            server_users(),
+        )
+        delivered = decode_sent_json(target_socket)
+
+        assert delivered_online
+        assert not stored_encrypted
+        assert storage.load_messages() == []
+        assert envelope["group_id"] == "group-equipa"
+        assert delivered["group_id"] == "group-equipa"
+        assert delivered["group_members"] == ["alice", "bob"]
+
+    print("OK - campos de grupo preservados")
+
+
 def test_contacts_metadata_normalization():
     print("\n[TESTE] Normalização de contactos")
 
@@ -453,6 +635,11 @@ def run_all():
     test_e2ee_v1_compatibility()
     test_e2ee_public_key_binding_signature()
     test_e2ee_public_key_overwrite_rejected()
+    test_server_stores_message_when_recipient_offline()
+    test_server_delivers_online_without_storing_pending()
+    test_server_fetch_after_online_delivery_is_empty()
+    test_server_stores_offline_when_online_socket_fails()
+    test_server_group_message_delivery_keeps_group_fields()
     test_contacts_metadata_normalization()
     test_protected_contacts_roundtrip()
     test_groups_metadata_normalization()
