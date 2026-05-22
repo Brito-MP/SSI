@@ -11,6 +11,8 @@ import copy
 import json
 import sys
 import tempfile
+import threading
+import time
 from contextlib import contextmanager
 from pathlib import Path
 from cryptography.hazmat.primitives.asymmetric import rsa
@@ -35,6 +37,7 @@ from handlers.message_handler import (
 )
 import storage
 from crypto_utils import (
+    build_message_aad,
     decrypt_group_payload,
     decrypt_from_sender,
     e2ee_public_key_binding_bytes,
@@ -150,7 +153,8 @@ def signed_group_message_envelope(
     group = group_model(group_key)
     timestamp = "2026-05-22T18:00:00Z"
     payload = build_group_message_payload("alice", "group-equipa", group, text, message_id, timestamp)
-    encrypted = encrypt_group_payload(group_key, payload)
+    aad = build_message_aad(message_id, "alice", target, timestamp)
+    encrypted = encrypt_group_payload(group_key, payload, aad)
     return build_group_message_envelope(
         "alice",
         target,
@@ -190,6 +194,18 @@ def temporary_messages_file():
         finally:
             clear_online_users()
             storage.MESSAGES_FILE = old_messages_file
+
+
+@contextmanager
+def temporary_users_file():
+    old_users_file = storage.USERS_FILE
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        storage.USERS_FILE = os.path.join(tmp_dir, "users.json")
+        storage.save_users({})
+        try:
+            yield
+        finally:
+            storage.USERS_FILE = old_users_file
 
 
 def decode_sent_json(sock):
@@ -521,11 +537,12 @@ def test_group_key_share_uses_individual_e2ee_without_plain_key():
     plaintext = group_key_share_plaintext("group-equipa", group)
     envelope = build_message_envelope("alice", "bob", plaintext, sender_priv, recipient_pub)
     serialized = json.dumps(envelope)
+    aad = build_message_aad(envelope["message_id"], envelope["from"], envelope["to"], envelope["timestamp"])
 
     assert group["group_key"] not in serialized
     assert "group_key" not in serialized
 
-    decoded = json.loads(decrypt_from_sender(envelope["payload"], recipient_priv))
+    decoded = json.loads(decrypt_from_sender(envelope["payload"], recipient_priv, aad=aad))
     assert decoded["type"] == GROUP_KEY_SHARE_TYPE
     assert decoded["group_key"] == group["group_key"]
     assert decoded["group_id"] == "group-equipa"
@@ -564,18 +581,21 @@ def test_group_message_is_encrypted_with_group_key():
     print("\n[TESTE] Mensagem de grupo é cifrada com group_key")
 
     group = group_model()
+    message_id = "group-msg-enc"
+    timestamp = "2026-05-22T18:00:00Z"
     payload = build_group_message_payload(
         "alice",
         "group-equipa",
         group,
         "segredo do grupo",
-        "group-msg-enc",
-        "2026-05-22T18:00:00Z",
+        message_id,
+        timestamp,
     )
-    encrypted = encrypt_group_payload(group["group_key"], payload)
+    aad = build_message_aad(message_id, "alice", "bob", timestamp)
+    encrypted = encrypt_group_payload(group["group_key"], payload, aad)
 
     assert "segredo do grupo" not in json.dumps(encrypted)
-    decoded = decrypt_group_payload(group["group_key"], encrypted["nonce"], encrypted["ciphertext"])
+    decoded = decrypt_group_payload(group["group_key"], encrypted["nonce"], encrypted["ciphertext"], aad)
     assert decoded == payload
 
     print("OK - grupo cifra e decifra com AES-GCM")
@@ -586,18 +606,21 @@ def test_member_without_group_key_cannot_decrypt_group_message():
 
     group = group_model()
     other_group_key = generate_group_key()
+    message_id = "group-msg-wrong-key"
+    timestamp = "2026-05-22T18:00:00Z"
     payload = build_group_message_payload(
         "alice",
         "group-equipa",
         group,
         "segredo do grupo",
-        "group-msg-wrong-key",
-        "2026-05-22T18:00:00Z",
+        message_id,
+        timestamp,
     )
-    encrypted = encrypt_group_payload(group["group_key"], payload)
+    aad = build_message_aad(message_id, "alice", "bob", timestamp)
+    encrypted = encrypt_group_payload(group["group_key"], payload, aad)
 
     try:
-        decrypt_group_payload(other_group_key, encrypted["nonce"], encrypted["ciphertext"])
+        decrypt_group_payload(other_group_key, encrypted["nonce"], encrypted["ciphertext"], aad)
     except Exception:
         pass
     else:
@@ -640,12 +663,74 @@ def test_private_messages_still_use_existing_e2ee_envelope():
     recipient_priv, recipient_pub = generate_rsa_keypair()
 
     envelope = build_message_envelope("alice", "bob", "mensagem privada", sender_priv, recipient_pub)
+    aad = build_message_aad(envelope["message_id"], envelope["from"], envelope["to"], envelope["timestamp"])
 
     assert "type" not in envelope
     assert "payload" in envelope
-    assert decrypt_from_sender(envelope["payload"], recipient_priv) == "mensagem privada"
+    assert decrypt_from_sender(envelope["payload"], recipient_priv, aad=aad) == "mensagem privada"
 
     print("OK - formato privado antigo preservado")
+
+
+def decrypt_envelope_for_test(envelope, recipient_private_key):
+    aad = build_message_aad(envelope["message_id"], envelope["from"], envelope["to"], envelope["timestamp"])
+    return decrypt_from_sender(envelope["payload"], recipient_private_key, aad=aad)
+
+
+def assert_envelope_decryption_fails(envelope, recipient_private_key):
+    try:
+        decrypt_envelope_for_test(envelope, recipient_private_key)
+    except Exception:
+        return
+    raise AssertionError("mensagem adulterada foi decifrada")
+
+
+def test_message_aad_correct_metadata_decrypts():
+    print("\n[TESTE] AES-GCM decifra com AAD correto")
+
+    sender_priv, _ = generate_rsa_keypair()
+    recipient_priv, recipient_pub = generate_rsa_keypair()
+    envelope = build_message_envelope("alice", "bob", "mensagem com AAD", sender_priv, recipient_pub)
+
+    assert decrypt_envelope_for_test(envelope, recipient_priv) == "mensagem com AAD"
+
+    print("OK - AAD correto aceite")
+
+
+def test_message_aad_rejects_metadata_tampering():
+    print("\n[TESTE] AES-GCM rejeita metadados adulterados no AAD")
+
+    sender_priv, _ = generate_rsa_keypair()
+    recipient_priv, recipient_pub = generate_rsa_keypair()
+    envelope = build_message_envelope("alice", "bob", "mensagem protegida", sender_priv, recipient_pub)
+
+    for field, value in [
+        ("message_id", "message-id-alterado"),
+        ("from", "mallory"),
+        ("to", "charlie"),
+        ("timestamp", "2026-05-23T00:00:00Z"),
+    ]:
+        tampered = copy.deepcopy(envelope)
+        tampered[field] = value
+        assert_envelope_decryption_fails(tampered, recipient_priv)
+
+    print("OK - alterações a message_id/from/to/timestamp falham")
+
+
+def test_message_aad_rejects_ciphertext_tampering():
+    print("\n[TESTE] AES-GCM continua a rejeitar ciphertext adulterado")
+
+    sender_priv, _ = generate_rsa_keypair()
+    recipient_priv, recipient_pub = generate_rsa_keypair()
+    envelope = build_message_envelope("alice", "bob", "mensagem protegida", sender_priv, recipient_pub)
+    tampered = copy.deepcopy(envelope)
+    ciphertext = bytearray(base64.b64decode(tampered["payload"]["ciphertext"]))
+    ciphertext[0] ^= 1
+    tampered["payload"]["ciphertext"] = base64.b64encode(ciphertext).decode()
+
+    assert_envelope_decryption_fails(tampered, recipient_priv)
+
+    print("OK - ciphertext adulterado falha")
 
 
 def test_group_message_duplicate_is_ignored():
@@ -703,6 +788,82 @@ def test_offline_sync_delivers_group_message_envelope():
         assert storage.load_messages() == []
 
     print("OK - grupo offline chega pelo sync")
+
+
+def run_threads(worker, count):
+    errors = []
+    errors_lock = threading.Lock()
+    barrier = threading.Barrier(count)
+
+    def wrapped(index):
+        try:
+            barrier.wait()
+            worker(index)
+        except Exception as exc:
+            with errors_lock:
+                errors.append(exc)
+
+    threads = [threading.Thread(target=wrapped, args=(i,)) for i in range(count)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+
+    if errors:
+        raise errors[0]
+
+
+def test_concurrent_user_updates_keep_valid_json():
+    print("\n[TESTE] Escritas concorrentes em users.json não perdem utilizadores")
+
+    thread_count = 30
+    with temporary_users_file():
+        def register_user(index):
+            username = f"user-{index}"
+            with storage.users_lock():
+                users = storage.load_users()
+                time.sleep(0.001)
+                users[username] = {
+                    "public_key": f"{username}-public-key",
+                    "certificate": f"{username}-certificate",
+                }
+                storage.save_users(users)
+
+        run_threads(register_user, thread_count)
+
+        with open(storage.USERS_FILE, "r", encoding="utf-8") as f:
+            stored_json = json.load(f)
+
+        assert stored_json == storage.load_users()
+        assert len(stored_json) == thread_count
+        for index in range(thread_count):
+            assert f"user-{index}" in stored_json
+
+    print("OK - users.json final válido e completo")
+
+
+def test_concurrent_message_storage_keeps_valid_json():
+    print("\n[TESTE] Escritas concorrentes em messages.json não perdem mensagens")
+
+    thread_count = 30
+    with temporary_messages_file():
+        def store_message(index):
+            deliver_or_store_message(
+                server_message(f"concurrent-{index}", target="bob"),
+                server_users(),
+            )
+
+        run_threads(store_message, thread_count)
+
+        with open(storage.MESSAGES_FILE, "r", encoding="utf-8") as f:
+            stored_json = json.load(f)
+
+        message_ids = {message["message_id"] for message in stored_json}
+        assert stored_json == storage.load_messages()
+        assert len(stored_json) == thread_count
+        assert message_ids == {f"concurrent-{index}" for index in range(thread_count)}
+
+    print("OK - messages.json final válido e completo")
 
 
 def test_contacts_metadata_normalization():
@@ -918,8 +1079,13 @@ def run_all():
     test_member_without_group_key_cannot_decrypt_group_message()
     test_server_cannot_see_group_text_or_key()
     test_private_messages_still_use_existing_e2ee_envelope()
+    test_message_aad_correct_metadata_decrypts()
+    test_message_aad_rejects_metadata_tampering()
+    test_message_aad_rejects_ciphertext_tampering()
     test_group_message_duplicate_is_ignored()
     test_offline_sync_delivers_group_message_envelope()
+    test_concurrent_user_updates_keep_valid_json()
+    test_concurrent_message_storage_keeps_valid_json()
     test_contacts_metadata_normalization()
     test_protected_contacts_roundtrip()
     test_groups_metadata_normalization()

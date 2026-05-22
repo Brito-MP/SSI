@@ -14,6 +14,16 @@ GROUP_KEY_SHARE_TYPE = "group_key_share"
 GROUP_MESSAGE_TYPE = "group_message"
 
 
+def build_message_aad(message_id, sender, recipient, timestamp) -> bytes:
+    aad_obj = {
+        "message_id": message_id,
+        "from": sender,
+        "to": recipient,
+        "timestamp": timestamp,
+    }
+    return json.dumps(aad_obj, sort_keys=True, separators=(",", ":")).encode("utf-8")
+
+
 def generate_rsa_keypair():
     private_key = rsa.generate_private_key(
         public_exponent=65537,
@@ -103,12 +113,12 @@ def _derive_e2ee_v2_key(shared_secret: bytes, sender_ephemeral_key: bytes, recip
 # Cifra uma mensagem para um destinatário específico.
 # Gera uma chave AES aleatória para esta mensagem, cifra o texto com AES-GCM
 # e encapsula a chave AES com a chave pública RSA do destinatário.
-def encrypt_for_recipient(plaintext: str, recipient_public_key):
+def encrypt_for_recipient(plaintext: str, recipient_public_key, aad: bytes | None = None):
     aes_key = AESGCM.generate_key(bit_length=256)
     aesgcm = AESGCM(aes_key)
     nonce = os.urandom(12)
 
-    ciphertext = aesgcm.encrypt(nonce, plaintext.encode(), None)
+    ciphertext = aesgcm.encrypt(nonce, plaintext.encode(), aad)
 
     encrypted_key = recipient_public_key.encrypt(
         aes_key,
@@ -126,7 +136,7 @@ def encrypt_for_recipient(plaintext: str, recipient_public_key):
     }
 
 
-def encrypt_for_recipient_v2(plaintext: str, recipient_x25519_public_key):
+def encrypt_for_recipient_v2(plaintext: str, recipient_x25519_public_key, aad: bytes | None = None):
     if not isinstance(recipient_x25519_public_key, x25519.X25519PublicKey):
         raise TypeError("chave pública do destinatário não é X25519")
 
@@ -139,7 +149,7 @@ def encrypt_for_recipient_v2(plaintext: str, recipient_x25519_public_key):
 
     aesgcm = AESGCM(aes_key)
     nonce = os.urandom(12)
-    ciphertext = aesgcm.encrypt(nonce, plaintext.encode(), None)
+    ciphertext = aesgcm.encrypt(nonce, plaintext.encode(), aad)
 
     return {
         "version": E2EE_MESSAGE_VERSION,
@@ -150,7 +160,7 @@ def encrypt_for_recipient_v2(plaintext: str, recipient_x25519_public_key):
 
 
 # Decifra uma mensagem recebida por este utilizador.
-def decrypt_from_sender_v1(payload: dict, recipient_private_key) -> str:
+def decrypt_from_sender_v1(payload: dict, recipient_private_key, aad: bytes | None = None) -> str:
     encrypted_key = base64.b64decode(payload["encrypted_key"])
     nonce = base64.b64decode(payload["nonce"])
     ciphertext = base64.b64decode(payload["ciphertext"])
@@ -165,11 +175,11 @@ def decrypt_from_sender_v1(payload: dict, recipient_private_key) -> str:
     )
 
     aesgcm = AESGCM(aes_key)
-    plaintext = aesgcm.decrypt(nonce, ciphertext, None)
+    plaintext = aesgcm.decrypt(nonce, ciphertext, aad)
     return plaintext.decode()
 
 
-def decrypt_from_sender_v2(payload: dict, recipient_x25519_private_key) -> str:
+def decrypt_from_sender_v2(payload: dict, recipient_x25519_private_key, aad: bytes | None = None) -> str:
     if not isinstance(recipient_x25519_private_key, x25519.X25519PrivateKey):
         raise TypeError("chave privada E2EE não é X25519")
 
@@ -183,15 +193,15 @@ def decrypt_from_sender_v2(payload: dict, recipient_x25519_private_key) -> str:
     aes_key = _derive_e2ee_v2_key(shared_secret, sender_ephemeral_raw, recipient_static_raw)
 
     aesgcm = AESGCM(aes_key)
-    plaintext = aesgcm.decrypt(nonce, ciphertext, None)
+    plaintext = aesgcm.decrypt(nonce, ciphertext, aad)
     return plaintext.decode()
 
 
 # Decifra uma mensagem recebida por este utilizador.
-def decrypt_from_sender(payload: dict, recipient_private_key, recipient_x25519_private_key=None) -> str:
+def decrypt_from_sender(payload: dict, recipient_private_key, recipient_x25519_private_key=None, aad: bytes | None = None) -> str:
     if payload.get("version") == E2EE_MESSAGE_VERSION:
-        return decrypt_from_sender_v2(payload, recipient_x25519_private_key)
-    return decrypt_from_sender_v1(payload, recipient_private_key)
+        return decrypt_from_sender_v2(payload, recipient_x25519_private_key, aad)
+    return decrypt_from_sender_v1(payload, recipient_private_key, aad)
 
 
 def generate_group_key() -> str:
@@ -221,22 +231,22 @@ def is_valid_group_key(group_key: str) -> bool:
     return True
 
 
-def encrypt_group_payload(group_key: str, payload: dict):
+def encrypt_group_payload(group_key: str, payload: dict, aad: bytes | None = None):
     key = decode_group_key(group_key)
     nonce = os.urandom(12)
     plaintext = json.dumps(payload, separators=(",", ":")).encode()
-    ciphertext = AESGCM(key).encrypt(nonce, plaintext, None)
+    ciphertext = AESGCM(key).encrypt(nonce, plaintext, aad)
     return {
         "nonce": base64.b64encode(nonce).decode(),
         "ciphertext": base64.b64encode(ciphertext).decode(),
     }
 
 
-def decrypt_group_payload(group_key: str, nonce_b64: str, ciphertext_b64: str):
+def decrypt_group_payload(group_key: str, nonce_b64: str, ciphertext_b64: str, aad: bytes | None = None):
     key = decode_group_key(group_key)
     nonce = base64.b64decode(nonce_b64.encode(), validate=True)
     ciphertext = base64.b64decode(ciphertext_b64.encode(), validate=True)
-    plaintext = AESGCM(key).decrypt(nonce, ciphertext, None)
+    plaintext = AESGCM(key).decrypt(nonce, ciphertext, aad)
     payload = json.loads(plaintext.decode())
     if not isinstance(payload, dict):
         raise ValueError("payload de grupo inválido")

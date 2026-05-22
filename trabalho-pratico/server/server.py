@@ -28,8 +28,10 @@ from storage import (
     PROTECTED_CONTACTS_FIELD,
     PROTECTED_GROUPS_FIELD,
     load_users,
+    users_lock,
     save_users,
     load_messages,
+    messages_lock,
     save_messages,
     set_protected_contacts,
     set_protected_groups,
@@ -135,11 +137,12 @@ def build_envelope(msg: dict):
 
 
 def store_encrypted_message(msg: dict, envelope: dict | None = None):
-    messages = load_messages()
-    if envelope is None:
-        envelope = build_envelope(msg)
-    messages.append(envelope)
-    save_messages(messages)
+    with messages_lock():
+        messages = load_messages()
+        if envelope is None:
+            envelope = build_envelope(msg)
+        messages.append(envelope)
+        save_messages(messages)
     return envelope
 
 
@@ -175,10 +178,11 @@ def deliver_or_store_message(msg: dict, users: dict):
 
 # Entrega mensagens pendentes de um utilizador e remove-as da fila offline.
 def pop_pending_messages(username: str):
-    messages = load_messages()
-    pending = [m for m in messages if m["to"] == username]
-    remaining = [m for m in messages if m["to"] != username]
-    save_messages(remaining)
+    with messages_lock():
+        messages = load_messages()
+        pending = [m for m in messages if m["to"] == username]
+        remaining = [m for m in messages if m["to"] != username]
+        save_messages(remaining)
     return pending
 
 
@@ -244,94 +248,95 @@ def handle_client(conn, addr, security_ctx):
             command = msg.get("command")
 
             if command == "register":
-                users = load_users()
-                requested_username = msg.get("username")
-                if requested_username != authenticated_username:
-                    send_json(conn, {
-                        "status": "error",
-                        "message": "username não corresponde ao certificado autenticado",
-                    })
-                    continue
-
-                username = requested_username
-                try:
-                    requested_public_key = canonical_public_key_pem(msg["public_key"])
-                except Exception:
-                    send_json(conn, {"status": "error", "message": "chave pública inválida"})
-                    continue
-
-                if requested_public_key != authenticated_public_key:
-                    send_json(conn, {
-                        "status": "error",
-                        "message": "chave pública não corresponde ao certificado autenticado",
-                    })
-                    continue
-
-                try:
-                    requested_e2ee_public_key = can_set_e2ee_public_key(
-                        None,
-                        msg[E2EE_PUBLIC_KEY_FIELD],
-                    )
-                except KeyError:
-                    send_json(conn, {"status": "error", "message": "chave pública E2EE em falta"})
-                    continue
-                except Exception:
-                    send_json(conn, {"status": "error", "message": "chave pública E2EE inválida"})
-                    continue
-
-                requested_e2ee_public_key_signature = msg.get(E2EE_PUBLIC_KEY_SIGNATURE_FIELD)
-                if not isinstance(requested_e2ee_public_key_signature, str):
-                    send_json(conn, {"status": "error", "message": "assinatura da chave pública E2EE em falta"})
-                    continue
-
-                if not verify_signature(
-                    e2ee_public_key_binding_bytes(username, requested_e2ee_public_key),
-                    requested_e2ee_public_key_signature,
-                    public_key_from_pem(requested_public_key),
-                ):
-                    send_json(conn, {"status": "error", "message": "assinatura da chave pública E2EE inválida"})
-                    continue
-
-                user_data = users.get(username, {})
-                if not isinstance(user_data, dict):
-                    user_data = {}
-
-                existing_public_key = user_data.get("public_key")
-                if existing_public_key is not None:
-                    try:
-                        existing_public_key = canonical_public_key_pem(existing_public_key)
-                    except Exception:
-                        send_json(conn, {"status": "error", "message": "chave pública registada inválida"})
-                        continue
-
-                    if existing_public_key != requested_public_key:
+                with users_lock():
+                    users = load_users()
+                    requested_username = msg.get("username")
+                    if requested_username != authenticated_username:
                         send_json(conn, {
                             "status": "error",
-                            "message": "utilizador já registado com outra chave pública",
+                            "message": "username não corresponde ao certificado autenticado",
                         })
                         continue
 
-                existing_e2ee_public_key = user_data.get(E2EE_PUBLIC_KEY_FIELD)
-                try:
-                    requested_e2ee_public_key = can_set_e2ee_public_key(
-                        existing_e2ee_public_key,
-                        requested_e2ee_public_key,
-                    )
-                except ValueError as exc:
-                    send_json(conn, {"status": "error", "message": str(exc)})
-                    continue
-                except Exception:
-                    send_json(conn, {"status": "error", "message": "chave pública E2EE registada inválida"})
-                    continue
+                    username = requested_username
+                    try:
+                        requested_public_key = canonical_public_key_pem(msg["public_key"])
+                    except Exception:
+                        send_json(conn, {"status": "error", "message": "chave pública inválida"})
+                        continue
 
-                user_data["public_key"] = requested_public_key
-                user_data[E2EE_PUBLIC_KEY_FIELD] = requested_e2ee_public_key
-                user_data[E2EE_PUBLIC_KEY_SIGNATURE_FIELD] = requested_e2ee_public_key_signature
-                user_data["certificate"] = authenticated_certificate
-                user_data.pop("contacts", None)
-                user_data.pop("groups", None)
-                users[username] = user_data
-                save_users(users)
+                    if requested_public_key != authenticated_public_key:
+                        send_json(conn, {
+                            "status": "error",
+                            "message": "chave pública não corresponde ao certificado autenticado",
+                        })
+                        continue
+
+                    try:
+                        requested_e2ee_public_key = can_set_e2ee_public_key(
+                            None,
+                            msg[E2EE_PUBLIC_KEY_FIELD],
+                        )
+                    except KeyError:
+                        send_json(conn, {"status": "error", "message": "chave pública E2EE em falta"})
+                        continue
+                    except Exception:
+                        send_json(conn, {"status": "error", "message": "chave pública E2EE inválida"})
+                        continue
+
+                    requested_e2ee_public_key_signature = msg.get(E2EE_PUBLIC_KEY_SIGNATURE_FIELD)
+                    if not isinstance(requested_e2ee_public_key_signature, str):
+                        send_json(conn, {"status": "error", "message": "assinatura da chave pública E2EE em falta"})
+                        continue
+
+                    if not verify_signature(
+                        e2ee_public_key_binding_bytes(username, requested_e2ee_public_key),
+                        requested_e2ee_public_key_signature,
+                        public_key_from_pem(requested_public_key),
+                    ):
+                        send_json(conn, {"status": "error", "message": "assinatura da chave pública E2EE inválida"})
+                        continue
+
+                    user_data = users.get(username, {})
+                    if not isinstance(user_data, dict):
+                        user_data = {}
+
+                    existing_public_key = user_data.get("public_key")
+                    if existing_public_key is not None:
+                        try:
+                            existing_public_key = canonical_public_key_pem(existing_public_key)
+                        except Exception:
+                            send_json(conn, {"status": "error", "message": "chave pública registada inválida"})
+                            continue
+
+                        if existing_public_key != requested_public_key:
+                            send_json(conn, {
+                                "status": "error",
+                                "message": "utilizador já registado com outra chave pública",
+                            })
+                            continue
+
+                    existing_e2ee_public_key = user_data.get(E2EE_PUBLIC_KEY_FIELD)
+                    try:
+                        requested_e2ee_public_key = can_set_e2ee_public_key(
+                            existing_e2ee_public_key,
+                            requested_e2ee_public_key,
+                        )
+                    except ValueError as exc:
+                        send_json(conn, {"status": "error", "message": str(exc)})
+                        continue
+                    except Exception:
+                        send_json(conn, {"status": "error", "message": "chave pública E2EE registada inválida"})
+                        continue
+
+                    user_data["public_key"] = requested_public_key
+                    user_data[E2EE_PUBLIC_KEY_FIELD] = requested_e2ee_public_key
+                    user_data[E2EE_PUBLIC_KEY_SIGNATURE_FIELD] = requested_e2ee_public_key_signature
+                    user_data["certificate"] = authenticated_certificate
+                    user_data.pop("contacts", None)
+                    user_data.pop("groups", None)
+                    users[username] = user_data
+                    save_users(users)
                 with online_users_lock:
                     online_users[username] = conn
                 send_json(conn, {"status": "ok", "message": f"user '{username}' registado"})
@@ -409,26 +414,27 @@ def handle_client(conn, addr, security_ctx):
                 })
 
             elif command == "update_contacts":
-                users = load_users()
-                user_data = registered_user(users, authenticated_username)
-                if user_data is None:
-                    send_json(conn, {"status": "error", "message": "utilizador não registado"})
-                    continue
+                with users_lock():
+                    users = load_users()
+                    user_data = registered_user(users, authenticated_username)
+                    if user_data is None:
+                        send_json(conn, {"status": "error", "message": "utilizador não registado"})
+                        continue
 
-                protected_contacts = msg.get("protected_contacts")
-                try:
-                    public_key = public_key_from_pem(user_data["public_key"])
-                except Exception:
-                    send_json(conn, {"status": "error", "message": "chave pública do utilizador inválida"})
-                    continue
+                    protected_contacts = msg.get("protected_contacts")
+                    try:
+                        public_key = public_key_from_pem(user_data["public_key"])
+                    except Exception:
+                        send_json(conn, {"status": "error", "message": "chave pública do utilizador inválida"})
+                        continue
 
-                if not verify_protected_contacts(protected_contacts, authenticated_username, public_key):
-                    send_json(conn, {"status": "error", "message": "contactos protegidos inválidos"})
-                    continue
+                    if not verify_protected_contacts(protected_contacts, authenticated_username, public_key):
+                        send_json(conn, {"status": "error", "message": "contactos protegidos inválidos"})
+                        continue
 
-                set_protected_contacts(user_data, protected_contacts)
-                users[authenticated_username] = user_data
-                save_users(users)
+                    set_protected_contacts(user_data, protected_contacts)
+                    users[authenticated_username] = user_data
+                    save_users(users)
 
                 send_json(conn, {
                     "status": "ok",
@@ -449,26 +455,27 @@ def handle_client(conn, addr, security_ctx):
                 })
 
             elif command == "update_groups":
-                users = load_users()
-                user_data = registered_user(users, authenticated_username)
-                if user_data is None:
-                    send_json(conn, {"status": "error", "message": "utilizador não registado"})
-                    continue
+                with users_lock():
+                    users = load_users()
+                    user_data = registered_user(users, authenticated_username)
+                    if user_data is None:
+                        send_json(conn, {"status": "error", "message": "utilizador não registado"})
+                        continue
 
-                protected_groups = msg.get("protected_groups")
-                try:
-                    public_key = public_key_from_pem(user_data["public_key"])
-                except Exception:
-                    send_json(conn, {"status": "error", "message": "chave pública do utilizador inválida"})
-                    continue
+                    protected_groups = msg.get("protected_groups")
+                    try:
+                        public_key = public_key_from_pem(user_data["public_key"])
+                    except Exception:
+                        send_json(conn, {"status": "error", "message": "chave pública do utilizador inválida"})
+                        continue
 
-                if not verify_protected_groups(protected_groups, authenticated_username, public_key):
-                    send_json(conn, {"status": "error", "message": "grupos protegidos inválidos"})
-                    continue
+                    if not verify_protected_groups(protected_groups, authenticated_username, public_key):
+                        send_json(conn, {"status": "error", "message": "grupos protegidos inválidos"})
+                        continue
 
-                set_protected_groups(user_data, protected_groups)
-                users[authenticated_username] = user_data
-                save_users(users)
+                    set_protected_groups(user_data, protected_groups)
+                    users[authenticated_username] = user_data
+                    save_users(users)
 
                 send_json(conn, {
                     "status": "ok",

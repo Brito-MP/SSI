@@ -8,6 +8,7 @@ if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
 from crypto_utils import (
+    build_message_aad,
     canonical_message_bytes,
     decrypt_group_payload,
     decrypt_from_sender,
@@ -60,15 +61,18 @@ def _e2ee_key(recipient_keys):
 
 
 def build_message_envelope(my_username, target, text, my_private_key, recipient_keys, group=None, group_action=None):
+    message_id = generate_message_id()
+    timestamp = utc_timestamp()
+    aad = build_message_aad(message_id, my_username, target, timestamp)
     target_e2ee_public_key = _e2ee_key(recipient_keys)
     if target_e2ee_public_key is not None:
-        payload = encrypt_for_recipient_v2(text, target_e2ee_public_key)
+        payload = encrypt_for_recipient_v2(text, target_e2ee_public_key, aad)
     else:
-        payload = encrypt_for_recipient(text, _identity_key(recipient_keys))
+        payload = encrypt_for_recipient(text, _identity_key(recipient_keys), aad)
 
     envelope_to_sign = {
-        "message_id": generate_message_id(),
-        "timestamp": utc_timestamp(),
+        "message_id": message_id,
+        "timestamp": timestamp,
         "from": my_username,
         "to": target,
         "payload": payload,
@@ -193,7 +197,8 @@ def process_incoming_group_message(msg, state, message_id):
         return
 
     try:
-        payload = decrypt_group_payload(group["group_key"], msg["nonce"], msg["ciphertext"])
+        aad = build_message_aad(message_id, sender, msg["to"], msg["timestamp"])
+        payload = decrypt_group_payload(group["group_key"], msg["nonce"], msg["ciphertext"], aad)
     except Exception as exc:
         print(f"[AVISO] não foi possível decifrar a mensagem de grupo {message_id}: {exc}")
         return
@@ -298,7 +303,8 @@ def process_incoming_message(msg, state):
         return
 
     try:
-        plaintext = decrypt_from_sender(msg["payload"], state.private_key, state.x25519_private_key)
+        aad = build_message_aad(message_id, msg["from"], msg["to"], msg["timestamp"])
+        plaintext = decrypt_from_sender(msg["payload"], state.private_key, state.x25519_private_key, aad)
     except Exception as exc:
         print(f"[AVISO] não foi possível decifrar a mensagem {msg.get('message_id')}: {exc}")
         return
@@ -721,9 +727,10 @@ def cmd_send_group(state, group_id, text):
     message_id = generate_message_id()
     timestamp = utc_timestamp()
     payload = build_group_message_payload(state.username, group_id, group, text, message_id, timestamp)
-    encrypted_payload = encrypt_group_payload(group["group_key"], payload)
 
     for member in members:
+        aad = build_message_aad(message_id, state.username, member, timestamp)
+        encrypted_payload = encrypt_group_payload(group["group_key"], payload, aad)
         envelope = build_group_message_envelope(
             state.username,
             member,
