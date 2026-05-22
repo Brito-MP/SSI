@@ -60,6 +60,8 @@ class ChatState:
     stop_event: threading.Event = field(default_factory=threading.Event)
     conversations: dict = field(default_factory=dict)
     conversations_lock: threading.Lock = field(default_factory=threading.Lock)
+    seen_message_ids: set = field(default_factory=set)
+    seen_message_ids_lock: threading.Lock = field(default_factory=threading.Lock)
     groups: dict = field(default_factory=dict)
     groups_deleted: set = field(default_factory=set)
     groups_dirty: bool = False
@@ -68,6 +70,41 @@ class ChatState:
     key_cache_lock: threading.Lock = field(default_factory=threading.Lock)
     contacts: set = field(default_factory=set)
     active_conversation: str | None = None
+
+    def has_seen_message(self, message_id):
+        if not isinstance(message_id, str) or not message_id:
+            return False
+
+        with self.seen_message_ids_lock:
+            return message_id in self.seen_message_ids
+
+    def mark_message_seen(self, message_id):
+        if not isinstance(message_id, str) or not message_id:
+            return False
+
+        with self.seen_message_ids_lock:
+            if message_id in self.seen_message_ids:
+                return False
+            self.seen_message_ids.add(message_id)
+            return True
+
+    def rebuild_seen_message_ids_from_history(self):
+        message_ids = set()
+        with self.conversations_lock:
+            for messages in self.conversations.values():
+                if not isinstance(messages, list):
+                    continue
+                for message in messages:
+                    if not isinstance(message, dict):
+                        continue
+                    message_id = message.get("message_id")
+                    if isinstance(message_id, str) and message_id:
+                        message_ids.add(message_id)
+
+        with self.seen_message_ids_lock:
+            self.seen_message_ids.update(message_ids)
+
+        return len(message_ids)
 
     @classmethod
     def create(cls, username: str):

@@ -7,13 +7,22 @@ python3 test_security.py
 
 import os
 import copy
+import sys
+from pathlib import Path
 from cryptography.hazmat.primitives.asymmetric import rsa
+
+CLIENT_DIR = Path(__file__).resolve().parent / "client"
+if str(CLIENT_DIR) not in sys.path:
+    sys.path.insert(0, str(CLIENT_DIR))
 
 from common.key_exchange import derive_session_key
 from common.certificates import load_client_certificate
 from common.security import client_username_from_certificate, sign_dh_keys, validate_signature
 
 from common.crypto import encrypt_message, decrypt_message
+from chat_state import ChatState
+from handlers.conversation_handler import save_to_history
+from handlers.message_handler import process_incoming_message
 from crypto_utils import (
     decrypt_from_sender,
     e2ee_public_key_binding_bytes,
@@ -42,6 +51,27 @@ def generate_rsa_keypair():
 
     public_key = private_key.public_key()
     return private_key, public_key
+
+
+def make_chat_state():
+    return ChatState(
+        username="alice",
+        private_key=None,
+        public_key=None,
+        x25519_private_key=None,
+        x25519_public_key=None,
+    )
+
+
+def history_message(message_id=None, sender="bob", target="alice"):
+    msg = {
+        "timestamp": "2026-05-22T18:00:00Z",
+        "from": sender,
+        "to": target,
+    }
+    if message_id is not None:
+        msg["message_id"] = message_id
+    return msg
 
 
 def test_encryption():
@@ -325,6 +355,89 @@ def test_protected_groups_roundtrip():
     print("OK - grupos protegidos contra leitura e alteração")
 
 
+def test_message_dedup_accepts_new_message():
+    print("\n[TESTE] Deduplicação aceita mensagem nova")
+
+    state = make_chat_state()
+    assert save_to_history(state, history_message("msg-1"), "olá") is True
+
+    assert len(state.conversations["bob"]) == 1
+    assert state.has_seen_message("msg-1")
+
+    print("OK - mensagem nova aceite")
+
+
+def test_message_dedup_ignores_duplicate_message():
+    print("\n[TESTE] Deduplicação ignora mensagem repetida")
+
+    state = make_chat_state()
+    msg = history_message("msg-dup")
+
+    assert save_to_history(state, msg, "primeira") is True
+    assert save_to_history(state, msg, "segunda") is False
+
+    assert len(state.conversations["bob"]) == 1
+    assert state.conversations["bob"][0]["text"] == "primeira"
+
+    print("OK - duplicado ignorado")
+
+
+def test_message_dedup_accepts_distinct_message_ids():
+    print("\n[TESTE] Deduplicação aceita ids diferentes")
+
+    state = make_chat_state()
+
+    assert save_to_history(state, history_message("msg-1"), "primeira") is True
+    assert save_to_history(state, history_message("msg-2"), "segunda") is True
+
+    assert len(state.conversations["bob"]) == 2
+
+    print("OK - mensagens distintas aceites")
+
+
+def test_message_without_id_is_ignored_without_crash():
+    print("\n[TESTE] Mensagem sem message_id não rebenta")
+
+    state = make_chat_state()
+
+    assert save_to_history(state, history_message(), "sem id") is False
+    assert state.conversations == {}
+
+    print("OK - mensagem sem message_id ignorada")
+
+
+def test_incoming_message_without_id_is_ignored_without_crash():
+    print("\n[TESTE] Mensagem recebida sem message_id não rebenta")
+
+    state = make_chat_state()
+
+    process_incoming_message({"from": "bob"}, state)
+    assert state.conversations == {}
+
+    print("OK - mensagem recebida sem message_id ignorada")
+
+
+def test_seen_message_ids_rebuild_from_history():
+    print("\n[TESTE] Reconstrução de ids vistos a partir do histórico")
+
+    state = make_chat_state()
+    state.conversations["bob"] = [
+        {
+            "message_id": "msg-antiga",
+            "timestamp": "2026-05-22T18:00:00Z",
+            "from": "bob",
+            "to": "alice",
+            "text": "já existia",
+        }
+    ]
+
+    assert state.rebuild_seen_message_ids_from_history() == 1
+    assert save_to_history(state, history_message("msg-antiga"), "replay") is False
+    assert len(state.conversations["bob"]) == 1
+
+    print("OK - ids vistos reconstruídos")
+
+
 def run_all():
     print("===== TESTES DE SEGURANÇA =====")
 
@@ -344,6 +457,12 @@ def run_all():
     test_protected_contacts_roundtrip()
     test_groups_metadata_normalization()
     test_protected_groups_roundtrip()
+    test_message_dedup_accepts_new_message()
+    test_message_dedup_ignores_duplicate_message()
+    test_message_dedup_accepts_distinct_message_ids()
+    test_message_without_id_is_ignored_without_crash()
+    test_incoming_message_without_id_is_ignored_without_crash()
+    test_seen_message_ids_rebuild_from_history()
 
     print("\nTODOS OS TESTES PASSARAM")
 

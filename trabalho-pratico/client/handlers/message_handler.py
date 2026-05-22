@@ -106,6 +106,17 @@ def get_sender_public_key(msg, state):
 
 
 def process_incoming_message(msg, state):
+    message_id = msg.get("message_id")
+    if not isinstance(message_id, str) or not message_id:
+        return
+
+    if state.has_seen_message(message_id):
+        return
+
+    for required_field in ["timestamp", "from", "to", "payload", "signature"]:
+        if required_field not in msg:
+            return
+
     sender_key = get_sender_public_key(msg, state)
     sender = msg.get("from")
 
@@ -114,7 +125,7 @@ def process_incoming_message(msg, state):
         return
 
     signed_part = {
-        "message_id": msg["message_id"],
+        "message_id": message_id,
         "timestamp": msg["timestamp"],
         "from": msg["from"],
         "to": msg["to"],
@@ -136,10 +147,14 @@ def process_incoming_message(msg, state):
         return
 
     if msg.get("group_action") == GROUP_ACTION_DELETE:
+        if not state.mark_message_seen(message_id):
+            return
         handle_group_delete_message(state, msg, plaintext)
         return
 
-    save_to_history(state, msg, plaintext)
+    if not save_to_history(state, msg, plaintext):
+        return
+
     if msg.get("group_id"):
         group_name = msg.get("group_name", msg["group_id"])
         print(f"\n[Nova mensagem em {group_name}] {sender}: {plaintext} ({msg['timestamp']})")

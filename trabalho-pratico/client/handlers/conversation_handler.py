@@ -1,4 +1,15 @@
 def save_to_history(state, msg, plaintext):
+    message_id = msg.get("message_id")
+    if not isinstance(message_id, str) or not message_id:
+        return False
+
+    for required_field in ["timestamp", "from", "to"]:
+        if required_field not in msg:
+            return False
+
+    if not state.mark_message_seen(message_id):
+        return False
+
     if msg.get("group_id"):
         peer = msg["group_id"]
         group_name = msg.get("group_name", peer)
@@ -25,7 +36,7 @@ def save_to_history(state, msg, plaintext):
         peer = msg["from"] if msg["from"] != state.username else msg["to"]
 
     record = {
-        "message_id": msg["message_id"],
+        "message_id": message_id,
         "timestamp": msg["timestamp"],
         "from": msg["from"],
         "to": msg["to"],
@@ -36,6 +47,8 @@ def save_to_history(state, msg, plaintext):
 
     with state.conversations_lock:
         state.conversations.setdefault(peer, []).append(record)
+
+    return True
 
 
 def cmd_conversations(state):
