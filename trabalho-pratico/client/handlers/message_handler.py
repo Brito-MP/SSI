@@ -1,5 +1,6 @@
 import sys
 import re
+import json
 from pathlib import Path
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
@@ -8,11 +9,18 @@ if str(ROOT_DIR) not in sys.path:
 
 from crypto_utils import (
     canonical_message_bytes,
+    decrypt_group_payload,
     decrypt_from_sender,
     e2ee_public_key_binding_bytes,
+    encrypt_group_payload,
     encrypt_for_recipient,
     encrypt_for_recipient_v2,
+    generate_group_key,
     generate_message_id,
+    GROUP_KEY_SHARE_TYPE,
+    GROUP_MESSAGE_TYPE,
+    group_message_signed_part,
+    is_valid_group_key,
     normalize_groups,
     protect_groups,
     public_key_from_pem,
@@ -82,6 +90,58 @@ def build_message_envelope(my_username, target, text, my_private_key, recipient_
     }
 
 
+def group_key_share_plaintext(group_id, group):
+    payload = {
+        "type": GROUP_KEY_SHARE_TYPE,
+        "group_id": group_id,
+        "group_name": group.get("name", group_id),
+        "members": sorted(set(group.get("members", []))),
+        "group_key": group["group_key"],
+    }
+    return json.dumps(payload, separators=(",", ":"))
+
+
+def build_group_message_payload(my_username, group_id, group, text, message_id, timestamp):
+    return {
+        "type": GROUP_MESSAGE_TYPE,
+        "group_id": group_id,
+        "group_name": group.get("name", group_id),
+        "members": sorted(set(group.get("members", []))),
+        "from": my_username,
+        "text": text,
+        "timestamp": timestamp,
+        "message_id": message_id,
+    }
+
+
+def build_group_message_envelope(my_username, target, group_id, encrypted_payload, message_id, timestamp, my_private_key):
+    envelope_to_sign = {
+        "type": GROUP_MESSAGE_TYPE,
+        "group_id": group_id,
+        "message_id": message_id,
+        "timestamp": timestamp,
+        "from": my_username,
+        "to": target,
+        "nonce": encrypted_payload["nonce"],
+        "ciphertext": encrypted_payload["ciphertext"],
+    }
+    signature = sign_message(canonical_message_bytes(group_message_signed_part(envelope_to_sign)), my_private_key)
+    return {
+        **envelope_to_sign,
+        "signature": signature,
+    }
+
+
+def parse_json_object(text):
+    try:
+        data = json.loads(text)
+    except (TypeError, json.JSONDecodeError):
+        return None
+    if not isinstance(data, dict):
+        return None
+    return data
+
+
 def get_sender_public_key(msg, state):
     sender = msg["from"]
 
@@ -105,12 +165,109 @@ def get_sender_public_key(msg, state):
         return state.key_cache.get(sender)
 
 
+def process_incoming_group_message(msg, state, message_id):
+    required_fields = ["type", "group_id", "timestamp", "from", "to", "nonce", "ciphertext", "signature"]
+    for required_field in required_fields:
+        if not isinstance(msg.get(required_field), str) or not msg.get(required_field):
+            return
+
+    sender_key = get_sender_public_key(msg, state)
+    sender = msg.get("from")
+    if sender_key is None:
+        print(f"[AVISO] sem chave pública local para validar assinatura de {sender}.")
+        return
+
+    valid = verify_signature(
+        canonical_message_bytes(group_message_signed_part(msg)),
+        msg["signature"],
+        sender_key,
+    )
+    if not valid:
+        print(f"[AVISO] assinatura inválida de {sender} na mensagem de grupo {message_id}.")
+        return
+
+    group_id = msg["group_id"]
+    group = state.groups.get(group_id)
+    if not isinstance(group, dict) or not is_valid_group_key(group.get("group_key")):
+        print(f"[AVISO] sem group_key local para decifrar mensagem do grupo {group_id}.")
+        return
+
+    try:
+        payload = decrypt_group_payload(group["group_key"], msg["nonce"], msg["ciphertext"])
+    except Exception as exc:
+        print(f"[AVISO] não foi possível decifrar a mensagem de grupo {message_id}: {exc}")
+        return
+
+    if payload.get("type") != GROUP_MESSAGE_TYPE:
+        return
+    if payload.get("group_id") != group_id or payload.get("message_id") != message_id:
+        print(f"[AVISO] metadados inconsistentes na mensagem de grupo {message_id}.")
+        return
+    if payload.get("from") != sender:
+        print(f"[AVISO] remetente inconsistente na mensagem de grupo {message_id}.")
+        return
+    if not isinstance(payload.get("text"), str) or not isinstance(payload.get("timestamp"), str):
+        return
+
+    history_msg = {
+        "message_id": message_id,
+        "timestamp": payload["timestamp"],
+        "from": sender,
+        "to": group_id,
+        "group_id": group_id,
+        "group_name": payload.get("group_name", group.get("name", group_id)),
+        "group_members": payload.get("members", group.get("members", [])),
+    }
+
+    if not save_to_history(state, history_msg, payload["text"]):
+        return
+
+    group_name = history_msg["group_name"]
+    print(f"\n[Nova mensagem em {group_name}] {sender}: {payload['text']} ({payload['timestamp']})")
+
+
+def handle_group_key_share_message(state, msg, payload, message_id):
+    group_id = payload.get("group_id")
+    if not isinstance(group_id, str) or not group_id:
+        return
+
+    clean_groups = normalize_groups({
+        group_id: {
+            "name": payload.get("group_name", group_id),
+            "members": payload.get("members", []),
+            "group_key": payload.get("group_key"),
+        }
+    })
+    group = clean_groups.get(group_id)
+    if group is None or not is_valid_group_key(group.get("group_key")):
+        return
+
+    sender = msg.get("from")
+    members = group.get("members", [])
+    if state.username not in members or sender not in members:
+        print(f"[AVISO] partilha de group_key inválida para {group_id}.")
+        return
+
+    if not state.mark_message_seen(message_id):
+        return
+
+    state.groups_deleted.discard(group_id)
+    state.groups[group_id] = group
+    state.groups_dirty = True
+    state.conversations.setdefault(group_id, [])
+    print(f"\n[Grupo] Entraste no grupo {group.get('name', group_id)}.")
+
+
 def process_incoming_message(msg, state):
     message_id = msg.get("message_id")
     if not isinstance(message_id, str) or not message_id:
         return
 
     if state.has_seen_message(message_id):
+        return
+
+    if msg.get("type") == GROUP_MESSAGE_TYPE:
+        process_incoming_group_message(msg, state, message_id)
         return
 
     for required_field in ["timestamp", "from", "to", "payload", "signature"]:
@@ -144,6 +301,11 @@ def process_incoming_message(msg, state):
         plaintext = decrypt_from_sender(msg["payload"], state.private_key, state.x25519_private_key)
     except Exception as exc:
         print(f"[AVISO] não foi possível decifrar a mensagem {msg.get('message_id')}: {exc}")
+        return
+
+    control_payload = parse_json_object(plaintext)
+    if control_payload is not None and control_payload.get("type") == GROUP_KEY_SHARE_TYPE:
+        handle_group_key_share_message(state, msg, control_payload, message_id)
         return
 
     if msg.get("group_action") == GROUP_ACTION_DELETE:
@@ -353,6 +515,37 @@ def update_groups(state):
     return True
 
 
+def send_group_key_share(state, member, group_id, group):
+    target_public_key = get_user_key(state, member)
+    if target_public_key is None:
+        return False
+
+    plaintext = group_key_share_plaintext(group_id, group)
+    envelope = build_message_envelope(
+        state.username,
+        member,
+        plaintext,
+        state.private_key,
+        target_public_key,
+    )
+    resp = send_request(
+        state.sock,
+        state.response_queue,
+        state.stop_event,
+        {"command": "send_message", **envelope},
+    )
+    return resp is not None and resp.get("status") == "ok"
+
+
+def send_group_key_shares(state, group_id):
+    group = state.groups[group_id]
+    failed_members = []
+    for member in sorted({member for member in group.get("members", []) if member != state.username}):
+        if not send_group_key_share(state, member, group_id, group):
+            failed_members.append(member)
+    return failed_members
+
+
 def cmd_send(state, target, text):
     if target in state.groups:
         cmd_send_group(state, target, text)
@@ -421,14 +614,19 @@ def cmd_create_group(state, name, members):
     state.groups[group_id] = {
         "name": clean_name,
         "members": all_members,
+        "group_key": generate_group_key(),
     }
     state.groups_dirty = True
     if not update_groups(state):
         state.groups.pop(group_id, None)
         return
 
+    failed_members = send_group_key_shares(state, group_id)
     state.conversations.setdefault(group_id, [])
-    print(f"Grupo '{clean_name}' criado: {group_id}")
+    if failed_members:
+        print(f"Grupo '{clean_name}' criado, mas não foi possível partilhar a chave com:", ", ".join(failed_members))
+    else:
+        print(f"Grupo '{clean_name}' criado: {group_id}")
 
 
 def cmd_groups(state):
@@ -510,31 +708,30 @@ def cmd_send_group(state, group_id, text):
         print("Grupo desconhecido.")
         return
 
+    if not is_valid_group_key(group.get("group_key")):
+        print("Grupo sem group_key, recrie o grupo.")
+        return
+
     members = sorted({member for member in group.get("members", []) if member != state.username})
     if not members:
         print("Grupo sem outros membros.")
         return
 
     sent = 0
-    local_envelope = None
-    group_info = {
-        "id": group_id,
-        "name": group.get("name", group_id),
-        "members": sorted(set(group.get("members", []) + [state.username])),
-    }
+    message_id = generate_message_id()
+    timestamp = utc_timestamp()
+    payload = build_group_message_payload(state.username, group_id, group, text, message_id, timestamp)
+    encrypted_payload = encrypt_group_payload(group["group_key"], payload)
 
     for member in members:
-        target_public_key = get_user_key(state, member)
-        if target_public_key is None:
-            continue
-
-        envelope = build_message_envelope(
+        envelope = build_group_message_envelope(
             state.username,
             member,
-            text,
+            group_id,
+            encrypted_payload,
+            message_id,
+            timestamp,
             state.private_key,
-            target_public_key,
-            group=group_info,
         )
         resp = send_request(
             state.sock,
@@ -552,16 +749,20 @@ def cmd_send_group(state, group_id, text):
             continue
 
         sent += 1
-        if local_envelope is None:
-            local_envelope = {
-                **envelope,
-                "to": group_id,
-            }
 
     if sent == 0:
         print("Mensagem de grupo não foi enviada.")
         return
 
+    local_envelope = {
+        "message_id": message_id,
+        "timestamp": timestamp,
+        "from": state.username,
+        "to": group_id,
+        "group_id": group_id,
+        "group_name": group.get("name", group_id),
+        "group_members": group.get("members", []),
+    }
     save_to_history(state, local_envelope, text)
     print(f"Mensagem enviada para {sent} membro(s) do grupo.")
 

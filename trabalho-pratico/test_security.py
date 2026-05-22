@@ -6,6 +6,7 @@ python3 test_security.py
 """
 
 import os
+import base64
 import copy
 import json
 import sys
@@ -25,14 +26,25 @@ from common.security import client_username_from_certificate, sign_dh_keys, vali
 from common.crypto import encrypt_message, decrypt_message
 from chat_state import ChatState
 from handlers.conversation_handler import save_to_history
-from handlers.message_handler import process_incoming_message
+from handlers.message_handler import (
+    build_group_message_envelope,
+    build_group_message_payload,
+    build_message_envelope,
+    group_key_share_plaintext,
+    process_incoming_message,
+)
 import storage
 from crypto_utils import (
+    decrypt_group_payload,
     decrypt_from_sender,
     e2ee_public_key_binding_bytes,
+    encrypt_group_payload,
     encrypt_for_recipient,
     encrypt_for_recipient_v2,
+    generate_group_key,
     generate_x25519_keypair,
+    GROUP_KEY_SHARE_TYPE,
+    GROUP_MESSAGE_TYPE,
     normalize_contact_list,
     normalize_groups,
     protect_contacts,
@@ -46,6 +58,7 @@ from crypto_utils import (
 from server.server import (
     can_set_e2ee_public_key,
     deliver_or_store_message,
+    is_valid_envelope,
     online_users,
     online_users_lock,
     pop_pending_messages,
@@ -117,6 +130,36 @@ def server_message(message_id="server-msg-1", target="bob", group=False):
             "group_members": ["alice", "bob"],
         })
     return msg
+
+
+def group_model(group_key=None):
+    return {
+        "name": "Equipa",
+        "members": ["alice", "bob"],
+        "group_key": group_key or generate_group_key(),
+    }
+
+
+def signed_group_message_envelope(
+    sender_private_key,
+    group_key,
+    message_id="group-msg-1",
+    text="olá grupo",
+    target="bob",
+):
+    group = group_model(group_key)
+    timestamp = "2026-05-22T18:00:00Z"
+    payload = build_group_message_payload("alice", "group-equipa", group, text, message_id, timestamp)
+    encrypted = encrypt_group_payload(group_key, payload)
+    return build_group_message_envelope(
+        "alice",
+        target,
+        "group-equipa",
+        encrypted,
+        message_id,
+        timestamp,
+        sender_private_key,
+    )
 
 
 class FakeSocket:
@@ -456,6 +499,212 @@ def test_server_group_message_delivery_keeps_group_fields():
     print("OK - campos de grupo preservados")
 
 
+def test_group_key_is_256_bit_aes_key():
+    print("\n[TESTE] group_key é AES-GCM 256 bits")
+
+    group_key = generate_group_key()
+    decoded = base64.b64decode(group_key.encode(), validate=True)
+    groups = normalize_groups({"group-equipa": group_model(group_key)})
+
+    assert len(decoded) == 32
+    assert groups["group-equipa"]["group_key"] == group_key
+
+    print("OK - group_key válida guardada no modelo de grupo")
+
+
+def test_group_key_share_uses_individual_e2ee_without_plain_key():
+    print("\n[TESTE] group_key_share usa E2EE individual")
+
+    sender_priv, _ = generate_rsa_keypair()
+    recipient_priv, recipient_pub = generate_rsa_keypair()
+    group = group_model()
+    plaintext = group_key_share_plaintext("group-equipa", group)
+    envelope = build_message_envelope("alice", "bob", plaintext, sender_priv, recipient_pub)
+    serialized = json.dumps(envelope)
+
+    assert group["group_key"] not in serialized
+    assert "group_key" not in serialized
+
+    decoded = json.loads(decrypt_from_sender(envelope["payload"], recipient_priv))
+    assert decoded["type"] == GROUP_KEY_SHARE_TYPE
+    assert decoded["group_key"] == group["group_key"]
+    assert decoded["group_id"] == "group-equipa"
+
+    print("OK - group_key só aparece depois de decifrar E2EE")
+
+
+def test_receiving_group_key_share_updates_local_group():
+    print("\n[TESTE] Receber group_key_share atualiza grupo local")
+
+    sender_priv, sender_pub = generate_rsa_keypair()
+    recipient_priv, recipient_pub = generate_rsa_keypair()
+    group = group_model()
+    plaintext = group_key_share_plaintext("group-equipa", group)
+    envelope = build_message_envelope("alice", "bob", plaintext, sender_priv, recipient_pub)
+    state = ChatState(
+        username="bob",
+        private_key=recipient_priv,
+        public_key=recipient_pub,
+        x25519_private_key=None,
+        x25519_public_key=None,
+    )
+    state.key_cache["alice"] = sender_pub
+
+    process_incoming_message(envelope, state)
+
+    assert state.groups["group-equipa"]["group_key"] == group["group_key"]
+    assert state.groups["group-equipa"]["members"] == ["alice", "bob"]
+    assert state.conversations["group-equipa"] == []
+    assert state.has_seen_message(envelope["message_id"])
+
+    print("OK - group_key_share guardada sem mensagem normal")
+
+
+def test_group_message_is_encrypted_with_group_key():
+    print("\n[TESTE] Mensagem de grupo é cifrada com group_key")
+
+    group = group_model()
+    payload = build_group_message_payload(
+        "alice",
+        "group-equipa",
+        group,
+        "segredo do grupo",
+        "group-msg-enc",
+        "2026-05-22T18:00:00Z",
+    )
+    encrypted = encrypt_group_payload(group["group_key"], payload)
+
+    assert "segredo do grupo" not in json.dumps(encrypted)
+    decoded = decrypt_group_payload(group["group_key"], encrypted["nonce"], encrypted["ciphertext"])
+    assert decoded == payload
+
+    print("OK - grupo cifra e decifra com AES-GCM")
+
+
+def test_member_without_group_key_cannot_decrypt_group_message():
+    print("\n[TESTE] Utilizador sem group_key não decifra mensagem de grupo")
+
+    group = group_model()
+    other_group_key = generate_group_key()
+    payload = build_group_message_payload(
+        "alice",
+        "group-equipa",
+        group,
+        "segredo do grupo",
+        "group-msg-wrong-key",
+        "2026-05-22T18:00:00Z",
+    )
+    encrypted = encrypt_group_payload(group["group_key"], payload)
+
+    try:
+        decrypt_group_payload(other_group_key, encrypted["nonce"], encrypted["ciphertext"])
+    except Exception:
+        pass
+    else:
+        raise AssertionError("mensagem de grupo foi decifrada com chave errada")
+
+    print("OK - chave errada não decifra")
+
+
+def test_server_cannot_see_group_text_or_key():
+    print("\n[TESTE] Servidor não vê texto nem group_key em group_message")
+
+    sender_priv, _ = generate_rsa_keypair()
+    group = group_model()
+    envelope = signed_group_message_envelope(
+        sender_priv,
+        group["group_key"],
+        message_id="server-group-secret",
+        text="texto invisível ao servidor",
+    )
+
+    assert is_valid_envelope(envelope)
+    with temporary_messages_file():
+        stored_envelope, delivered_online, stored_encrypted = deliver_or_store_message(envelope, server_users())
+        stored_json = json.dumps(storage.load_messages(), ensure_ascii=False)
+
+        assert not delivered_online
+        assert stored_encrypted
+        assert stored_envelope == envelope
+        assert "texto invisível ao servidor" not in stored_json
+        assert group["group_key"] not in stored_json
+        assert "group_key" not in stored_json
+
+    print("OK - servidor guarda só envelope cifrado de grupo")
+
+
+def test_private_messages_still_use_existing_e2ee_envelope():
+    print("\n[TESTE] Mensagens privadas continuam compatíveis")
+
+    sender_priv, _ = generate_rsa_keypair()
+    recipient_priv, recipient_pub = generate_rsa_keypair()
+
+    envelope = build_message_envelope("alice", "bob", "mensagem privada", sender_priv, recipient_pub)
+
+    assert "type" not in envelope
+    assert "payload" in envelope
+    assert decrypt_from_sender(envelope["payload"], recipient_priv) == "mensagem privada"
+
+    print("OK - formato privado antigo preservado")
+
+
+def test_group_message_duplicate_is_ignored():
+    print("\n[TESTE] Mensagem de grupo duplicada é ignorada")
+
+    sender_priv, sender_pub = generate_rsa_keypair()
+    group = group_model()
+    state = ChatState(
+        username="bob",
+        private_key=None,
+        public_key=None,
+        x25519_private_key=None,
+        x25519_public_key=None,
+    )
+    state.groups["group-equipa"] = group
+    state.key_cache["alice"] = sender_pub
+
+    envelope = signed_group_message_envelope(sender_priv, group["group_key"], message_id="group-dup")
+    process_incoming_message(envelope, state)
+    process_incoming_message(envelope, state)
+
+    assert len(state.conversations["group-equipa"]) == 1
+    assert state.conversations["group-equipa"][0]["text"] == "olá grupo"
+
+    print("OK - duplicado de grupo ignorado")
+
+
+def test_offline_sync_delivers_group_message_envelope():
+    print("\n[TESTE] Sync/offline entrega mensagem de grupo cifrada")
+
+    sender_priv, sender_pub = generate_rsa_keypair()
+    group = group_model()
+    envelope = signed_group_message_envelope(sender_priv, group["group_key"], message_id="group-offline")
+
+    with temporary_messages_file():
+        deliver_or_store_message(envelope, server_users())
+        pending = pop_pending_messages("bob")
+
+        assert len(pending) == 1
+        assert pending[0]["message_id"] == "group-offline"
+
+        state = ChatState(
+            username="bob",
+            private_key=None,
+            public_key=None,
+            x25519_private_key=None,
+            x25519_public_key=None,
+        )
+        state.groups["group-equipa"] = group
+        state.key_cache["alice"] = sender_pub
+        process_incoming_message(pending[0], state)
+
+        assert len(state.conversations["group-equipa"]) == 1
+        assert state.conversations["group-equipa"][0]["text"] == "olá grupo"
+        assert storage.load_messages() == []
+
+    print("OK - grupo offline chega pelo sync")
+
+
 def test_contacts_metadata_normalization():
     print("\n[TESTE] Normalização de contactos")
 
@@ -535,6 +784,28 @@ def test_protected_groups_roundtrip():
         raise AssertionError("grupos alterados foram aceites")
 
     print("OK - grupos protegidos contra leitura e alteração")
+
+
+def test_protected_groups_preserve_group_key_without_plaintext():
+    print("\n[TESTE] Grupos protegidos preservam group_key cifrada")
+
+    priv, pub = generate_rsa_keypair()
+    group = group_model()
+    protected_groups = protect_groups(
+        "henrique",
+        {"group-equipa": group},
+        priv,
+        pub,
+    )
+    protected_json = json.dumps(protected_groups)
+
+    assert group["group_key"] not in protected_json
+    assert "group_key" not in protected_json
+
+    groups = unprotect_groups(protected_groups, "henrique", priv, pub)
+    assert groups["group-equipa"]["group_key"] == group["group_key"]
+
+    print("OK - group_key fica só no payload decifrado")
 
 
 def test_message_dedup_accepts_new_message():
@@ -640,10 +911,20 @@ def run_all():
     test_server_fetch_after_online_delivery_is_empty()
     test_server_stores_offline_when_online_socket_fails()
     test_server_group_message_delivery_keeps_group_fields()
+    test_group_key_is_256_bit_aes_key()
+    test_group_key_share_uses_individual_e2ee_without_plain_key()
+    test_receiving_group_key_share_updates_local_group()
+    test_group_message_is_encrypted_with_group_key()
+    test_member_without_group_key_cannot_decrypt_group_message()
+    test_server_cannot_see_group_text_or_key()
+    test_private_messages_still_use_existing_e2ee_envelope()
+    test_group_message_duplicate_is_ignored()
+    test_offline_sync_delivers_group_message_envelope()
     test_contacts_metadata_normalization()
     test_protected_contacts_roundtrip()
     test_groups_metadata_normalization()
     test_protected_groups_roundtrip()
+    test_protected_groups_preserve_group_key_without_plaintext()
     test_message_dedup_accepts_new_message()
     test_message_dedup_ignores_duplicate_message()
     test_message_dedup_accepts_distinct_message_ids()

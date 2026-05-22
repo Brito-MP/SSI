@@ -10,6 +10,8 @@ from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 
 
 E2EE_MESSAGE_VERSION = 2
+GROUP_KEY_SHARE_TYPE = "group_key_share"
+GROUP_MESSAGE_TYPE = "group_message"
 
 
 def generate_rsa_keypair():
@@ -192,6 +194,68 @@ def decrypt_from_sender(payload: dict, recipient_private_key, recipient_x25519_p
     return decrypt_from_sender_v1(payload, recipient_private_key)
 
 
+def generate_group_key() -> str:
+    key = AESGCM.generate_key(bit_length=256)
+    return base64.b64encode(key).decode()
+
+
+def decode_group_key(group_key: str) -> bytes:
+    if not isinstance(group_key, str) or not group_key:
+        raise ValueError("group_key inválida")
+
+    try:
+        key = base64.b64decode(group_key.encode(), validate=True)
+    except Exception as exc:
+        raise ValueError("group_key inválida") from exc
+
+    if len(key) != 32:
+        raise ValueError("group_key deve ter 256 bits")
+    return key
+
+
+def is_valid_group_key(group_key: str) -> bool:
+    try:
+        decode_group_key(group_key)
+    except Exception:
+        return False
+    return True
+
+
+def encrypt_group_payload(group_key: str, payload: dict):
+    key = decode_group_key(group_key)
+    nonce = os.urandom(12)
+    plaintext = json.dumps(payload, separators=(",", ":")).encode()
+    ciphertext = AESGCM(key).encrypt(nonce, plaintext, None)
+    return {
+        "nonce": base64.b64encode(nonce).decode(),
+        "ciphertext": base64.b64encode(ciphertext).decode(),
+    }
+
+
+def decrypt_group_payload(group_key: str, nonce_b64: str, ciphertext_b64: str):
+    key = decode_group_key(group_key)
+    nonce = base64.b64decode(nonce_b64.encode(), validate=True)
+    ciphertext = base64.b64decode(ciphertext_b64.encode(), validate=True)
+    plaintext = AESGCM(key).decrypt(nonce, ciphertext, None)
+    payload = json.loads(plaintext.decode())
+    if not isinstance(payload, dict):
+        raise ValueError("payload de grupo inválido")
+    return payload
+
+
+def group_message_signed_part(msg: dict):
+    return {
+        "type": GROUP_MESSAGE_TYPE,
+        "group_id": msg["group_id"],
+        "message_id": msg["message_id"],
+        "timestamp": msg["timestamp"],
+        "from": msg["from"],
+        "to": msg["to"],
+        "nonce": msg["nonce"],
+        "ciphertext": msg["ciphertext"],
+    }
+
+
 # Assina dados com a chave privada do remetente.
 def sign_message(data: bytes, private_key) -> str:
     signature = private_key.sign(
@@ -269,10 +333,15 @@ def normalize_groups(groups):
         clean_name = name.strip() or clean_group_id
 
         clean_members = normalize_contact_list(group.get("members", []))
-        clean_groups[clean_group_id] = {
+        clean_group = {
             "name": clean_name,
             "members": clean_members,
         }
+        group_key = group.get("group_key")
+        if is_valid_group_key(group_key):
+            clean_group["group_key"] = group_key
+
+        clean_groups[clean_group_id] = clean_group
 
     return dict(sorted(clean_groups.items()))
 

@@ -14,6 +14,7 @@ from common.secure_channel import (
 )
 from crypto_utils import (
     E2EE_MESSAGE_VERSION,
+    GROUP_MESSAGE_TYPE,
     e2ee_public_key_binding_bytes,
     public_key_from_pem,
     public_key_to_pem,
@@ -54,6 +55,17 @@ REQUIRED_ENVELOPE_FIELDS = {
     "signature",
 }
 OPTIONAL_ENVELOPE_FIELDS = {"group_id", "group_name", "group_members", "group_action"}
+REQUIRED_GROUP_MESSAGE_FIELDS = {
+    "type",
+    "group_id",
+    "message_id",
+    "timestamp",
+    "from",
+    "to",
+    "nonce",
+    "ciphertext",
+    "signature",
+}
 
 
 def is_valid_payload(payload: dict) -> bool:
@@ -74,6 +86,12 @@ def is_valid_payload(payload: dict) -> bool:
 
 # Verifica se a estrutura da mensagem recebida tem o formato esperado.
 def is_valid_envelope(msg: dict) -> bool:
+    if msg.get("type") == GROUP_MESSAGE_TYPE:
+        return REQUIRED_GROUP_MESSAGE_FIELDS.issubset(msg.keys()) and all(
+            isinstance(msg[field], str) and msg[field]
+            for field in REQUIRED_GROUP_MESSAGE_FIELDS
+        )
+
     if not REQUIRED_ENVELOPE_FIELDS.issubset(msg.keys()):
         return False
 
@@ -89,6 +107,19 @@ def is_valid_envelope(msg: dict) -> bool:
 # Guarda uma mensagem offline para o destinatário.
 # O conteúdo já vem cifrado do cliente; o servidor só persiste e encaminha.
 def build_envelope(msg: dict):
+    if msg.get("type") == GROUP_MESSAGE_TYPE:
+        return {
+            "type": GROUP_MESSAGE_TYPE,
+            "group_id": msg["group_id"],
+            "message_id": msg["message_id"],
+            "timestamp": msg["timestamp"],
+            "from": msg["from"],
+            "to": msg["to"],
+            "nonce": msg["nonce"],
+            "ciphertext": msg["ciphertext"],
+            "signature": msg["signature"],
+        }
+
     envelope = {
         "message_id": msg["message_id"],
         "timestamp": msg["timestamp"],
