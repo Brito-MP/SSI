@@ -23,6 +23,210 @@
         "encrypted_key": "dBzaGhKhNcgrAP5T+Cg2MZs7/DEu7YI0FoBxI9d5yFzNMvGx453yRDu5dDhvZ3Ssh9IrAUuA1R3PIlRXZhteUcb4glnZ1kevIsoH+2aigvWaJTtx/1HIRt2S7am8t/DdfQG6EvuSZCyo/naoNbEZ0niLBIEntVTnZAwbpV0WUhD1RN3MSsSCGeMznUvr7gEk9P3ULmAeoOwc+ciUoKrPEc+D9BYOhLEGt2K1xuLTcRn5XKNaiEPynzjU2WZo9n3mVTdJqFdFO64FqTIp07VFqFBZY2JuWWnd3aUmWUnZJOsUCC8I1El5YfTVtaMkgkIwpXoMXC44Ri0wdoeIFKgQ6Q=="
       },
       "signature": "KUlKMU5W5eQ6qnSqLy1MXKjNZty2gu2q1+T4IiAE0tNpnUdQcD+35+xaUNuHWFwln14bB6x1tFD09YdV07LEcYid+cdJtHtYbi5F9AZLwrC2rbGEmti0uicgVCnfHImXlICYx5wrCPW6+kQfHc/qk8qKHZdl9C1JfiE7rknHRFkMn9GVefF1qDQmby9q+sY6RklmUwCBHYPvLb+1NkDkEsAcx2lDAorhY1JEelGH3u8w1KSHif7q2VrsQX2Ix8NbX1FFvM5JpZ/cSQ/if3ph6LJBHO6O5Vp1qKFCcpD4OSGZtbcIAFfB+2xfRPp2y/tI4mlaegduDBZliwhkq/n16g=="
+    },
+    "e2ee_public_key": "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VuAyEAxiFGIbxWEExXVMsQOZknRMhM8kJGvnOALZghpnCAtw8=\n-----END PUBLIC KEY-----\n",
+    "e2ee_public_key_signature": "auZaxlcIDJUxFy04nkuoHZ4rDbtc+KEmYe8LRFTEiPtfoNxiBzDjFDsOU0f154hb6N+EoUz+j8pyMTuogsYDrq94RgwNJpyKgKCUmUov/iCQ55vYxdgWKZh9vdPwDkNBwM/VqOseqiMz9tM+s9QBa7VmjUXHaOXVE1NusS/nlaN8i+C51KAq4HkfmI3OvsJxDV0QbFoROr6iEkIWsf2XFn7mR+KDxKY1fTA91bJvEktoZaMSaozKnF0fFy7ZGQ9/GJChP2FL5dR8L/87UpIqa32pnUQAhQh1g5KmhCIX1n0f0svz/gHtxfGXMlQShZHCOyfOVzuPDLrwXvYxH/7Y9Q==",
+    "signed_prekeys": {
+      "76a53d4e-b556-457d-b251-4ef96e6b32c1": {
+        "type": "signed_prekey",
+        "version": 1,
+        "prekey_id": "76a53d4e-b556-457d-b251-4ef96e6b32c1",
+        "algorithm": "X25519",
+        "public_key": "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VuAyEAsXgKA+pJ4rttHOtfvHUyQ61CgufUZuk6HaCD3QSdtSU=\n-----END PUBLIC KEY-----\n",
+        "signature": "jZscxdqlI7FJQJhxztEDGSXvB4k1TfFAHrLewUwzo/DNKVQMWFhkIGdBOZqPUkx4pt/ZLirHqXG+uLg/BTe1X1ikR/nZepjULGn4CoPNwy50nG7UCsvThgRRNUTKgcoa8ZVvumFNm5yvjSsa2YBN0/iU1fvUkMDii5AkLGc7tUBg/goa5xpCqu3gxJoX0NqR+wmdxocyFdjS9BGcau6yOWN4dkRn7T4+/oa0DdZVq6HVEh61a/kSccx6djUqbizw7xuv2EM/6VdWMOukAtVmkBTtniCqFs35s9sxSE+sCp2I7dFMNtLvp+PGa7+cRtZy9LjZcLzF39AXUE2Ow3oxqw==",
+        "created_at": "2026-05-23T23:01:05.035192+00:00",
+        "state": "available"
+      },
+      "f65b8de3-e7be-46df-a5b1-f4edca2362b3": {
+        "type": "signed_prekey",
+        "version": 1,
+        "prekey_id": "f65b8de3-e7be-46df-a5b1-f4edca2362b3",
+        "algorithm": "X25519",
+        "public_key": "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VuAyEA3eELMBo7gomAQSfnifNTiztunsH/F06wXp6XlDaSeXw=\n-----END PUBLIC KEY-----\n",
+        "signature": "DdmJdJw5Nu53WvL/fcvmmmrjdQ+BE91eRMY/DUEF4TzwSf8mcNrvLNjiU++Gp2QYDf2ch/GxLlDWrcCPeC4lOylO1fgDDfJ7sGKgimklNIdb+EufWcmLo8pYrn39ZCoUIhu9zyiw4NDkQnNdPgpzdyiHSG/u/RYMdqhFUqZLlLH0H71YgUqJiVLRrrp8pU9SgGcuaMerDMdyERE0e3G81N18HVbAhESdnQ389iq8dS6kH+4hWMVA/BzWxGkqnIq97ciPcgE04ZZm12TIIebGCKkAfxwAI3WbDQbjni7ozW3bE/oWtO4GIl3BonBR4KRv2FgwAuF5xWDbxvHcLdYNIg==",
+        "created_at": "2026-05-23T23:01:05.035928+00:00",
+        "state": "available"
+      },
+      "0abbc25b-fc35-4d66-805b-17e9c1023063": {
+        "type": "signed_prekey",
+        "version": 1,
+        "prekey_id": "0abbc25b-fc35-4d66-805b-17e9c1023063",
+        "algorithm": "X25519",
+        "public_key": "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VuAyEA5RmqGLQXrcKVwqNRtVFDJ8PkfdzptWLL4jm5A1DP4Bg=\n-----END PUBLIC KEY-----\n",
+        "signature": "TlJR7qxonak99CdIhMxt8JDrN4kB+Je/cJFJw1bfpyOE/5I8wE/CEh6AxCSRHr3i++inZkONcKoLYAJhcZ8jIulbSt3c0MojPv8t0GeewV8v4+250TnPHvVcsUxbQ20MC+MTtppV7/amfNoMgM71E/VwiWGiN87Nod1cOGk1FS7ajhbmAOMFzVuLIcmauuQwvowz0dXAKbunRWg3RO9n8aIXY5xk1eh89Q73obyIGrBsqixVzd9sYOt3munkxXfjegyy/Fqa2g+7X6ZEfhx2B69IIdnAJQR19lrL5kklJtgfIjLRFBK83sM5yBRKlEusCdESvwmpckHFixPCX6XQYA==",
+        "created_at": "2026-05-23T23:01:05.036529+00:00",
+        "state": "available"
+      },
+      "bf961038-533b-435b-a667-4155b26b10c1": {
+        "type": "signed_prekey",
+        "version": 1,
+        "prekey_id": "bf961038-533b-435b-a667-4155b26b10c1",
+        "algorithm": "X25519",
+        "public_key": "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VuAyEAmC0mkyroYM4xucPRKxl7p0Y8nQnoCTB1h/1PKA8CgkA=\n-----END PUBLIC KEY-----\n",
+        "signature": "r+AoSAq/nBkdFyQ+rv2QvgYffgsRGdcH1Lzb0u6WSe31z1xj2/pVni7FQxQOlW1hgHs9xLbgOtvbCyuQVhzwfh/xtpif1tD67mrVJZd9MjP4Yt7NGPQPz/JlYYti07sovohlYszCpDfDSc4FyAuVg02HazdILdw89n0hO85eTvu9lqEijieT1tzSApyR/KSQELtg0RBWsRcZhhyQp1C60JH1V8AdUzydOwsCLm3MxOWBqZWiuh3DfWgnD/mGJxTqeUnQv+n8sQoZwVBCpYuNZjPs/ayLoMM9asXi8jyPRPlcoOzcfx2b7NFn7d0Fc4Z6BmWVXRahkZjEqURnIPZiVw==",
+        "created_at": "2026-05-23T23:01:05.037125+00:00",
+        "state": "available"
+      },
+      "e5bd5d53-64cd-4b6d-85d3-7eaeef903084": {
+        "type": "signed_prekey",
+        "version": 1,
+        "prekey_id": "e5bd5d53-64cd-4b6d-85d3-7eaeef903084",
+        "algorithm": "X25519",
+        "public_key": "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VuAyEAz8AC3/EgEsJd4NqL8W87GGasp3u9Oa95mXI9+Qc9fkA=\n-----END PUBLIC KEY-----\n",
+        "signature": "pYYpwHMiFHLFylYXUvUzVJ+Z1l6cKr/htlhYma5obuU8nzz1RNPzuejBWEZJjjdOp7/jCh7h502HG8U5TOCkLlgg8ieKziens94z/cYP5PQpBdKBO5dDAq0MiRsSO0gK5E3YMXOG4h6LuWU0/I28coLDrP0XTe2RmyJDDFiDCkbLvszlDSPA5KByYcCyeuoCldyRrkqSYO1b/keWOBuu1u6VO/JeD+fKsAmSRNbqgXsWi7J8/LlKT4e1AwDSortMTWIUPYY4z8zN14cAlzGJcG7++qrMTPULwCaQkeuM37TAgt677UyFP8gnjTIk1LYgqzYVEg8kN4RhIz5PVBWWsA==",
+        "created_at": "2026-05-23T23:01:05.037746+00:00",
+        "state": "available"
+      },
+      "3c555365-ea2a-46e7-b58b-5396ab98b812": {
+        "type": "signed_prekey",
+        "version": 1,
+        "prekey_id": "3c555365-ea2a-46e7-b58b-5396ab98b812",
+        "algorithm": "X25519",
+        "public_key": "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VuAyEAs6ygex1CCPfSXrt+1+ilve6Ar4Z93DhhsV+qK7Cobz4=\n-----END PUBLIC KEY-----\n",
+        "signature": "jGaPcSLS84fEsh6AtYDUcDe8N3cLHalfptuQECszCMBdIN+bxCe8tE+lDtOmwvcD3S8sVJiYDN4kvdNvPkAjiKyBg3VTkdhlIBzgwC5T1fJrjEdlHCAoabgjnstciViioN83apNO+QryPpn3gwgygfbAzGtozbdoVw3zrp2dEyPPWc9l08CuOvNq5HEupOLrRe1c6MsJDd33kV49PLqwJaGvXdqw+aHdSE+k+IrjaJNGsnRTsavXbO5nNEyBa1Fxgp40cNMiSQ5PaJ8IygQovigUXHjhztEYzs1vDvo/LJ3+n2hiA42FVfeHV6dp8UwaGa7bvmzzxhY1E6b3NmN4kw==",
+        "created_at": "2026-05-23T23:01:05.038363+00:00",
+        "state": "available"
+      },
+      "c23793b4-8c6d-454c-a9d6-087022f0941a": {
+        "type": "signed_prekey",
+        "version": 1,
+        "prekey_id": "c23793b4-8c6d-454c-a9d6-087022f0941a",
+        "algorithm": "X25519",
+        "public_key": "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VuAyEAvdFeR3wkSsgh5hCR+dgOFVms1M/f1Dqp+NO0pXYIWHI=\n-----END PUBLIC KEY-----\n",
+        "signature": "WlXKh5ov7rh6Q/cs67Sp2YAVfOyXqTeRhqylxOPoVfM0IX0aEhyDOyR1FiZua2ksEz1dL0XXPzEIsY+9j+uNsNChnL0MlQW7//OKQ/EysBWGzz51FL79rogR4aXqm3+8Dgo+chUSCB9Xfx7DRtIWAosXjWFguSxaOFSaPwOh6ASRw7CLNdMSj3oyB67qcwhK7nOPYGKX78QxSdSxvucJFM7gV96tNVr9CO3e+iP33gWYLquqHvK63547ASlewcEH9zHXke5E+Fqb24U9JTnQ7PJEjGz0cFq0qUk8k9Hu+imLvK113FymLjWX/4d+ktOPKgTOWgG/m6ftEI2xLxaRsQ==",
+        "created_at": "2026-05-23T23:01:05.038924+00:00",
+        "state": "available"
+      },
+      "f3a5b5d8-7b6c-465d-b1c1-b5a2b26be96d": {
+        "type": "signed_prekey",
+        "version": 1,
+        "prekey_id": "f3a5b5d8-7b6c-465d-b1c1-b5a2b26be96d",
+        "algorithm": "X25519",
+        "public_key": "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VuAyEAKT25bHCmZbbkZDUcdrKWd9EsXVtA/Enyh/iwY8rAJSo=\n-----END PUBLIC KEY-----\n",
+        "signature": "G3H+/hm7V0poZ32rOXwcOZIRGmSmcwVOetOPW2zM93T+uPhkz6ZwflAbVv5rRVkVwsIhRJYCKtNbhvf9lSlQghA+9ZPF3RTbFt6XPuDyo0Y9wftg2pLHd4wtOsAR6ajVXikUXUGVwGiPEQYiret0Fv3Fe5yLuet2CNAIwwE23CnotiD9RnEUbYSs84XwR5eD8XogxpIXTkohumjpYk8qFmwFnuDipRYU5f6C1voMAczw4NWXZOEK+pDNJEldDM+sbYvUdMFN8aXEFhB+IwDx6YB0fkuxiWaeMKWcEByKIUHV5Q6rBLR+KRYm2kTYQMEUUgQht98RPqiJ3zSFx+beQw==",
+        "created_at": "2026-05-23T23:01:05.039502+00:00",
+        "state": "available"
+      },
+      "d013a4c1-a892-4c0c-8202-03ed6c82d7c6": {
+        "type": "signed_prekey",
+        "version": 1,
+        "prekey_id": "d013a4c1-a892-4c0c-8202-03ed6c82d7c6",
+        "algorithm": "X25519",
+        "public_key": "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VuAyEA9e2HlraiCpd1yJT0ADmSY617e0S7cCh589oZ7q4j6Ak=\n-----END PUBLIC KEY-----\n",
+        "signature": "FRG5Zr39lQOPXbqUtgGLWgpbgXtrCF7OS/XogkZ8CYzpLvDWSz3rP3hKtfMm8OkB0s8l9MaZBHYqbR3t16vAnC1BI9CbbedpNsVCgeSoxo7WOW0aWHiKjdLMXTp6mTRUxGZB/7pB3d2YzzwMYmQcNV4AdTiyELkC8pwMYDnowxH8miWg8vAEKcWsqhpQ8bWm+J4GIRqbAulqtJxKNwXWQxDQCEKL8GuLH7ZGlHCkI7p7ZuVk2yi3qPQJg5Ekf3pVr9/3e9bd1cYgLHKsAHJi7Li3moXy9eG5VrsWpkMIAXzSnKYUVB7EnPNhyLIOeAxtaQF71MADpIt3Ei7COssipA==",
+        "created_at": "2026-05-23T23:01:05.040063+00:00",
+        "state": "available"
+      },
+      "1e2dc909-d354-48a2-b522-24c10f72b765": {
+        "type": "signed_prekey",
+        "version": 1,
+        "prekey_id": "1e2dc909-d354-48a2-b522-24c10f72b765",
+        "algorithm": "X25519",
+        "public_key": "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VuAyEAq8SYLFrcgyM0oik+bXgw1ghmRTkTueMIg+oIKPWhiWg=\n-----END PUBLIC KEY-----\n",
+        "signature": "KGb/X5a4pnKcpBYWkEn6vOWzCgKTA0v46KAD7Ppt8pxgVyrkq5IymLVrvrGyEG04eU8qHvdnjZa62D72TvAsZMUPMmFNMDkKoz7Gpe6t5gZoonf9elI1Gitei91kgjqnb86PtvQFmKufYnvB3tTWdB+h1io537634JgStNYN6RqoKCXhwkPwCNS5pP7impBmGZSfPjYfXusbHKfkLvW2gjDQCisEXHP9qM1PStQI8s1rNBxOx+31VQBvKulyW2rxCLYeJp0mAqxHF2qrXRUhDxqM3/YcKfUWTv/nexY7Y8YmRvawXliw8KF7wI9OywkDcEt6V8RmIH/Npduyugb/SA==",
+        "created_at": "2026-05-23T23:01:05.040629+00:00",
+        "state": "available"
+      },
+      "a6062c4e-f250-4c6a-b89b-4601647a7500": {
+        "type": "signed_prekey",
+        "version": 1,
+        "prekey_id": "a6062c4e-f250-4c6a-b89b-4601647a7500",
+        "algorithm": "X25519",
+        "public_key": "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VuAyEA/ZS9FelLZeVg721zsNHgOH4myABaWMXiEg3hsCSmsEI=\n-----END PUBLIC KEY-----\n",
+        "signature": "lqhBpDmQ+CxTdtY+fu8uf5lR1EDibQ3DkD7nmT05tOHvJg/iaSQ78O8JGzSfa1FEsr8Gj13aOBXciQZLPua6z2lp46tJEdCnFQ9kqZC4LL3/lcCNlWGIbnHEbDkKKpf+p3UWkbJBGqd4UGSZhRD1kJ4FQet08ANiZJAyFkd0BUZsg9DUYkswVvZuIpyx98Rw7i+xcc8E37bf3MI5IB+wBg22IxlbveRXi89PoEsGEm1uVnajKIn9cidOl5+gF+Nkq2mJkJ+2CCAdWwJfoEao6ALucaltHgxFX3unce5H7iSiKoS38pIDMzwYpQT7cm/v9fsmF1OutUaln41yC0A6+g==",
+        "created_at": "2026-05-23T23:12:56.614435+00:00",
+        "state": "available"
+      },
+      "0832d19a-8a17-4c5d-bc5f-9b7d5b10e5ca": {
+        "type": "signed_prekey",
+        "version": 1,
+        "prekey_id": "0832d19a-8a17-4c5d-bc5f-9b7d5b10e5ca",
+        "algorithm": "X25519",
+        "public_key": "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VuAyEACuV+6nnvw3j69g6v/rIt+TcgsAGPjwReX7JDOuD7QEw=\n-----END PUBLIC KEY-----\n",
+        "signature": "dFNyLFUyqReMEf4ndCRgpVXYDOYbBWsCdn16wMIvyzZZnTnsObs6x6SHWNzAMVVrcYaCYT1zaYUP7w4qEvQ2JMgFOp0ktIrcqBL6Lw+zpEN99ibyC2YT31n3SU7xJlgzo7LOoHgEL+LqQi4H5eWittyRWZ6oAsCUId8kfTnYb6or4HKGSUnV1ApajSYpXsvqZCxkQFQlprJeZI18FcKPBe1s73JDtvsosHxmToD4yUvSPLI20fc4atmLLPI2l6aAjPlVNGjX2z0rwn50UCSEtDJWnWBrcSTFeC0LBkVUsxGwKrk6yJ5/XQ61scHPfwfLDgpFzfgk3Gw1OxPEsfm0Cg==",
+        "created_at": "2026-05-23T23:12:56.615217+00:00",
+        "state": "available"
+      },
+      "d9c1bbd4-0604-44ed-9f85-a080e5ec2dfb": {
+        "type": "signed_prekey",
+        "version": 1,
+        "prekey_id": "d9c1bbd4-0604-44ed-9f85-a080e5ec2dfb",
+        "algorithm": "X25519",
+        "public_key": "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VuAyEAAc6xnhUgb1MRGTSlZyGXu/EXqXa5o3Oxy05nKazUy1Y=\n-----END PUBLIC KEY-----\n",
+        "signature": "FSWoTpptdBtiaJdejaXYmQD//EIwGG1SKD7j9YBQFoOUpTZTTzP08MBV+xlt5vztX9RmCjLYquJPdkdtD7aR8ZAgMd54mHvn2qjjnw4nPC5QW4na6DGTxYXYOSjEmfuMTcNGtq/vE2c5ip9d1lLolB/ER09f9b7A/79oQuL/b3/beD1LIOpsNzDbB4waaGSVDYfKr0U+EJksnVLqT4gZJs6nIRwxlsuQLCprw3ENMllQSkf6eW9JkOz1uLjRYAoCMR4b6yPKgSti4VABhmkFcw7YIr9HvF/5bGZ9PUZsRajSrSIYsL3XmmkFM86sHE2SOZ1CFNEtKDrdfi+RjXJ69w==",
+        "created_at": "2026-05-23T23:12:56.615811+00:00",
+        "state": "available"
+      },
+      "3df4833e-d994-42cd-9b70-9d0877ebf643": {
+        "type": "signed_prekey",
+        "version": 1,
+        "prekey_id": "3df4833e-d994-42cd-9b70-9d0877ebf643",
+        "algorithm": "X25519",
+        "public_key": "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VuAyEAEtIunl/2q0H83olJnlyZAqwXqHMGpj+wh57jR4X962U=\n-----END PUBLIC KEY-----\n",
+        "signature": "qWj/TJi5isog2LedCPO4QdlicDM6n5FMY2g1NtX65BPtpxB3Ch4coKT3Jl7M0wLOmecB6x7fErKtV5GMgaPhR+WcYZNDjdUgmfEUcnCzzYGhSMJXELhdOZufVAeBc+ZLBTGv/yue2XujfpaoOKJFInLdQh0n5MLwg0oWwyDAkHhe1V32PhFUlZU2eMu2WKyXrc0QVDf4uzPo3mtoWm2ezjQGmLPJu8Z+v1UF/1UKPPJKveCjtmV1y2a9eANZ9GWzfHOUwMSgDHSKtj9NC/eiq0bg6El0b26xo9AeVMINfLElaLOlEqa3WNQ6d0HWpuYinixzAcdQ7nS6mlFYkfIl+w==",
+        "created_at": "2026-05-23T23:12:56.616398+00:00",
+        "state": "available"
+      },
+      "53b5dd75-b9db-410f-b762-7a4c8e77a2d8": {
+        "type": "signed_prekey",
+        "version": 1,
+        "prekey_id": "53b5dd75-b9db-410f-b762-7a4c8e77a2d8",
+        "algorithm": "X25519",
+        "public_key": "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VuAyEADY/j2F1tihIoPCuWgqpPR7n3NTUtF6+9+HzlDiPPfSA=\n-----END PUBLIC KEY-----\n",
+        "signature": "BnS5QguBbuvtjgGDhDkjwdY9KyFW9WehYDuK3iRIUNUAy7V2mFrFlN5ZlPjzeWd9igfGDljsXGGf/1FuUGx2hb3pjYKO6YXb3M3kSC01HhrQc3kINpdD93T+it50nsO/EOAB0NcaNscBBE59s3SwbbeMr1fB6BnangSEy0iNucESLTzNhifnVc4tKRud7VCGskbXPGJ89qRfsLmXXv5mBHDCyaLwg1mdu3sfjXCUZZwPA0JqyEZ2549cTOr//g1NTVB4Q2+j68kwMaaDPzEygEfJ8iwedFczsqJvDu5kPjK+lYn5LUOCDEni1LJ39SwGmZ2IRhhlGhSd3WWALED28A==",
+        "created_at": "2026-05-23T23:12:56.616964+00:00",
+        "state": "available"
+      },
+      "47c2dfe0-b816-4180-bc31-3a43e442a988": {
+        "type": "signed_prekey",
+        "version": 1,
+        "prekey_id": "47c2dfe0-b816-4180-bc31-3a43e442a988",
+        "algorithm": "X25519",
+        "public_key": "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VuAyEAPyoGtyqBVh1HmykrHCigA9srIlmer6PKhK95FTv6ikg=\n-----END PUBLIC KEY-----\n",
+        "signature": "q8TTLdWjVsDFOm85POYOhGx2mpLFbaT3p6KSubBIltzAlVEHjmzqdzkrNepzGXiS31/LgrO9cD+1Fw2N5hdsaEHtrz62KFpR0UE6UFetxQ0aqGuIVCGUrlIVfC4tem5co30hXoeQ3pw1Izk8eblk00u8KZTkz8Zxk+SRf+xe1IypP2H2q8bQz9jgfUAvtat+Ybr4/wsTl5Ex43XBa864GWWTpYRm/ETQMxXaSunBzsl6VeSWEKfBC76d3kcs9tFDGh0jqQ+PWo2T8ir1naxV7V2FgjMCvI3z5GMNaOSyLuikpMASyAHzndKUTygxw2+UG2CogpsYAiyxFhqU59MZTA==",
+        "created_at": "2026-05-23T23:12:56.617521+00:00",
+        "state": "available"
+      },
+      "8d5dcb67-22f0-4236-bfd2-42d2f774d211": {
+        "type": "signed_prekey",
+        "version": 1,
+        "prekey_id": "8d5dcb67-22f0-4236-bfd2-42d2f774d211",
+        "algorithm": "X25519",
+        "public_key": "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VuAyEANCLS3mXRc3BS65CrBzoQtIRmr5gTf+CUU4IPKV6wlxw=\n-----END PUBLIC KEY-----\n",
+        "signature": "PMsG+e/RWh243S31HixEmWChIvrRwQ2QPT+Y+cWRHsX4+8Mn46ysF090SE53eVUo35vR9dlC9TL3MU6n/vMQY2B7LquaERrwpvuEuhGwL/ZUOpOGD1+Jq+FWssmmBCnQvYOjXU34coD3EXfMzkwbtqHT3tkUM8LB/PnwF+8LB9FLoch0wr6Fr0809hKPucO8mwEw3GgUvRU2wvhR/29A156Jz1JyAh4zOc1npYPu2TBSnJN3XfPvkViijOlSybsPilqr0qOdBRBJcb/copw9N5toh7jTYyEffVVc0fmiPkzgL7FYffhojMUQITszLxMRh9wuANfBlwuBRgdRXcbWxQ==",
+        "created_at": "2026-05-23T23:12:56.618093+00:00",
+        "state": "available"
+      },
+      "d75cfb9f-9399-4b37-ad9a-e898e5209542": {
+        "type": "signed_prekey",
+        "version": 1,
+        "prekey_id": "d75cfb9f-9399-4b37-ad9a-e898e5209542",
+        "algorithm": "X25519",
+        "public_key": "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VuAyEAlYTeyRfsnKwWS6m9hSdtPu5wSp3ye0uQ9a2DJKctjno=\n-----END PUBLIC KEY-----\n",
+        "signature": "W1MPsaFOH/mbB7PMdtz+tC8fcZGiQ0pJGzdpHF5XijRBZY1rNU+8H0O63PryIVDZYucoPeGBSt0nmU4l6O9A835JcP6t7GWILyPeZlI8Hz1TbSQJegcYCv7q2u2ESGh1OGJKu3wqTL1uqjzBW2MdsZ4XbbIVQM1X4xVP5LwvN0s/jDv6vAgGUszItFhK+qvNqjyiuL99+roQL+7gc0ZbLRzeHKYMnf9DHxK1P7XhaskoLQsZBJnGmbe1F//MUwAgR6bQIDQ0Pe4Gt0VvZ6GZ9Udg4+Y1d+xB3hSJve6dCVlkKVpFTBdseJ+qFGGLrYFYeriejZW4nsNeNZT9JGf/xA==",
+        "created_at": "2026-05-23T23:12:56.618697+00:00",
+        "state": "available"
+      },
+      "cd910967-5ec2-45be-8055-8eda4d358f50": {
+        "type": "signed_prekey",
+        "version": 1,
+        "prekey_id": "cd910967-5ec2-45be-8055-8eda4d358f50",
+        "algorithm": "X25519",
+        "public_key": "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VuAyEA2e0cYtG9qBbamp4DS9lHqrTF+4YxhK1ld7RXuIC0I04=\n-----END PUBLIC KEY-----\n",
+        "signature": "USfBRXIoEZJP2PYmmy44lurAU8ngS6lItPihRFUAT4OKQK1x5YDXgkHuKz/QLg+C8nXpbr3AjGOqHjgsVc0GSmHxBf/QF6S+U2iEucecvpp+9btr8OfnzcQITgazflBKZjhPOLwkbuSGe3KOfCFyt8FWpx5Hxym+bEaNY0kkLRnORVdaBt6JOJ9CEpHBkmiQMSpnaHn0ROs9ARyVyKIWdnizyHOVgzs+Rxeb4g51I+yKvwfEdb0sfsw2LbYjuqilwT5IwSMYOBXZfsw+d8fyGvbnvCEtjRK0G2spPwTuVixw8x3cFIZAoKU4S9NjiaCnfuH5YC+CP9/MnweI5/Wr5g==",
+        "created_at": "2026-05-23T23:12:56.619260+00:00",
+        "state": "available"
+      },
+      "b6bd78f7-10f9-4da8-b7a6-22edc247f584": {
+        "type": "signed_prekey",
+        "version": 1,
+        "prekey_id": "b6bd78f7-10f9-4da8-b7a6-22edc247f584",
+        "algorithm": "X25519",
+        "public_key": "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VuAyEA96vkR+MMmG9E3dL8lE79NxKGA17YjVJjpKpTh/BNWDc=\n-----END PUBLIC KEY-----\n",
+        "signature": "Jj5xTzavPm+PYctFVroXJeu4k4KoZhx59hvOccngOgfsOFjgiqhPhKuM5Dm3n0ntuLuh6K/Z4Ogw0La6t3JZfDoC4vWsA67rhvNvPQXP92Vhdv5ZGyIWtz6ckfQLZlF0IymiiWyqUkBS6FIVRXZoh8BAJRVaPAvoTd68W94V/d0HB5wHkhnZSZKHwIyr/MNly8EbQzlu8zcAHoQ8Ebh7pPxHhj2xrwBNmhNIwgx+p8A+SFjgV0O6fnlwUw3hRhsqqbhM+d/Z4SIgQZV/ytuy/ZJpHDrYLjYZRbyFJ50yeDR/b540DGEp2NFhMT1B1H9DilF/uyQR+9/wUQaaXMhO5A==",
+        "created_at": "2026-05-23T23:12:56.619846+00:00",
+        "state": "available"
+      }
     }
   },
   "goncalo": {
@@ -49,6 +253,210 @@
         "encrypted_key": "HmOAy4EGi1EMQnKS4J6q0ZfVGH1guPwgg89BpDCEQIwf6GTrrCBFk3kZLgA582Azl8964vzwW+kTsg05h0Ig/MgLzlOEBIHXg8O8Lp0WVcHnpIrO6kWei3iztWsWRFd4WUkGtc7lIE3eNCCJpkmhJVkKUyWqjbVEeBBRpx8Maxp535n0LxJkYMmjM5QuEomm18cBFiF+T2bfm8ou6sMTerPgpTaVoOQIhztjHLMMuBYGP2VJzJs0HPWDQL6T0VRreYIlXbPqUNGguxIrIDUu1ElCvyVzeOkAefjNNOvUTpumFRK//wq/PIbvLn5x0nDqMUGjGiJPgMfgNsz49NqiHg=="
       },
       "signature": "qkgPxItLpDVM1uQmIYqKgLPXHXiD+uAhi/sEqlNRwHWklAxWZiF39G4McMQ9+THNzvlNFUZzPNFyUh2AmWpQh+AF8oNJv2UmRx0UoS7MWWwRfuFZh0ydXoYLrYpyqQ/X4KDUz0WMuQMBxr7XYqWabUnL2hLqhrzWjUqqHAMY+79H0PWovravzDNQfH6lQDD2bU6k0SycQh6/GMdsNBkscCbPTPF/nlGBcywYfRlHwKN4hiv4CbvYjwWrx4qMpToXORVnnKTez4j3RUlBuNzxtQCDM2lUVFdJYuz58JjsQr+q3IgbAgaLmTBR4DePs9FIv/+j3dRhzKEwnJVggDUB4g=="
+    },
+    "e2ee_public_key": "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VuAyEAa0/0JbtkoYgJ+Upz22KFM1G/mpB3vCMJii9J+RRwylg=\n-----END PUBLIC KEY-----\n",
+    "e2ee_public_key_signature": "X3CWWGpBpAvebyDJfP8QW4B+B2xw9Yj8njlg8/HfRsYeR8titMCPKxNHGaFvBHXlbuOI46M5RuiJ24+GdYbf92Hxb7mry4UBWmt0E7qs3B12T3fHwsKNSmMgFVygKfkYu6Gtx00n8hRe9eu7GmQ4H7aWPpu4GvKeyuPen07Eff7vqEn+fQLNIRejbfETt8EDrjFx2kBMjUZJEc6/VM42bUfCpbVsdY88yM5jM5Zzl07/yAUdnq1zOWjH0JPMqHso5nqwWdd+uL7bh6hiFvpNFopSZofKw+e74dc1PRRksMkNuYmGv0GDV9W0pPbBKMh0/2/pu6WGxT1W1V0m03lUTQ==",
+    "signed_prekeys": {
+      "8a06e596-c4dd-479a-b9c0-e2ad383494cf": {
+        "type": "signed_prekey",
+        "version": 1,
+        "prekey_id": "8a06e596-c4dd-479a-b9c0-e2ad383494cf",
+        "algorithm": "X25519",
+        "public_key": "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VuAyEAC2thlNPqPm0rqWvt+P3O+49rqHwJwpERKtKJOjnxU24=\n-----END PUBLIC KEY-----\n",
+        "signature": "e7WCZ50xrsVv3xQAZmqE0EKEg2MPdIHPb3VwVytX6xs8+q1CGsZaqFbte7Kl8f5mRfEzrD0qe9wB64ELgYYABawPSKFM3rLRZ5ecNt3Ll4gf6AQBAE0FeeNt9Gx7w06/a4pI/kJqq10jd/1lfPVFiUbltxa9NZHbzRLPXaJwKMR/qPcI8+9E2+yFxEvxpwixPdoauGkxqS2qibCIygtbajH8yG48TEJtNrO9zN4OvWyAraf/MIkF/LJs9D6lwFw6Y0UpFRg1Qs9SvKZz20h7DOm9UD7DOOge9HZjh8y1tnDXg99LEpSUdAQc4kcORfBs1vlztD2Yf6BDdjp4BIzIDw==",
+        "created_at": "2026-05-23T23:01:18.752973+00:00",
+        "state": "available"
+      },
+      "ec1b0598-00e1-420a-831c-f61d8d4e7f75": {
+        "type": "signed_prekey",
+        "version": 1,
+        "prekey_id": "ec1b0598-00e1-420a-831c-f61d8d4e7f75",
+        "algorithm": "X25519",
+        "public_key": "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VuAyEA9m/5/ix1uT9Uvvc4QSANCoCQNpCccEjjG5NFfPBwmSU=\n-----END PUBLIC KEY-----\n",
+        "signature": "KbtA7t7mgnWHpE1dVioE4GbdE0nkFPs/FZ1taX709WDkiSLC+5tEpW2RPAmYaSopqqn7xNUhtjiyVrVxQTAyht3+0s6rXYW2s0aji2XgMM8Yt7R41Z8nIMCsH4x2bkVhLtXmCr6ntXLpimm7dlUKeGWCcIQk0XcnRa2hiEbCqDFJjf6WmgwDxd+L254aez1h9P+KTWMXa4DWYcRMVUfuOS34Zy0RM+g2vUuc5EGSnk07R2P5BCF0UBchk6QyvJBCizPl+Kn4KN3qtZF2rza1UGFV0Iq6oxl/zpRSkRQzq8lsiEbuvUZDIUBeSwcss9hX+UshLbiiTGnYYR9IIQhPpg==",
+        "created_at": "2026-05-23T23:01:18.753698+00:00",
+        "state": "available"
+      },
+      "bd32d14a-be60-40c2-a3d6-12990ef9cd26": {
+        "type": "signed_prekey",
+        "version": 1,
+        "prekey_id": "bd32d14a-be60-40c2-a3d6-12990ef9cd26",
+        "algorithm": "X25519",
+        "public_key": "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VuAyEA5ytCcNgWVvZOvkXUpeUXcGNpOXFhafj1fVnq3TZ3Ag8=\n-----END PUBLIC KEY-----\n",
+        "signature": "hAYbtK8o/cjXfcqE69s5LAXeQ8cS6xPrS8qZQiGLbbC7h3QUBYeYIKvozIYxrRyez6EztTbm7r6x2mcQKXGoxrpQCv8Oub2ijN5ieBh+DEmOkalVu9VUXcoql4Sxw6UVu7+CTBhorJlwWNMcKwsK/3z4b6N0300GMMVapPIWh269r2ROykelPAkJCTB5V2rGiiMr65xWXd2822Mlq0nbott/WF91cM3MM4Vn4ymfXrO27++Z1r9Ku6R/i9Amd3RxZsr1uswbe2w6ZKdtIe7co2/wgJ0124hqN/bymbLLYwpdcuO4ptJwBevQy110DRy5kqYsgoDyXA8bLiydTgvNcg==",
+        "created_at": "2026-05-23T23:01:18.754318+00:00",
+        "state": "available"
+      },
+      "48b5db30-d650-409a-a65b-91ef087876d8": {
+        "type": "signed_prekey",
+        "version": 1,
+        "prekey_id": "48b5db30-d650-409a-a65b-91ef087876d8",
+        "algorithm": "X25519",
+        "public_key": "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VuAyEA5Yh36bU8a3Vafk4mYN9N7jEMTnWf9LUX5+jIc4SseSg=\n-----END PUBLIC KEY-----\n",
+        "signature": "kHfOxZ8EbfpVt+unKAMeZOi4zf06svI0IXpd0cOLozX9c0A2J9/zMe8+ePyNgUM/kh32pqGosND0adfKQSxWo+nFKXsQ73rmfH//0K+BvCChLMVFY46iotXsQhxJaECOhAaPV/snIhFIE2nJeMgNLhPZTPzWTccgx9R0cSr5FmmzdaG3YYLFIEmAzMhUemYaSmOgiqJOfbV8RKYT3dt2ch4mvGZWl2vGQ9JsAgxIwxUQBeQYRqicTUrsVgCgBb8w5fDf/b+dHr92/V622da1EqTnZizA8AYueC7/mwBM2ZeOpj3y/dkJTE3CwX0FduiXLjepKzGZ0TtYi6J5FGMLMA==",
+        "created_at": "2026-05-23T23:01:18.754931+00:00",
+        "state": "available"
+      },
+      "b30e7cb7-914a-4b74-94b8-b597f7268e72": {
+        "type": "signed_prekey",
+        "version": 1,
+        "prekey_id": "b30e7cb7-914a-4b74-94b8-b597f7268e72",
+        "algorithm": "X25519",
+        "public_key": "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VuAyEAiGeNuLVZQuGz1SmAv2tpvKlZSz+E8CKql97LwLkoFxo=\n-----END PUBLIC KEY-----\n",
+        "signature": "KEuYXZozdf5/tyga7pUoraAQYz4+bxXvIWvgMplxo7+Clo8JSEoXrmrUZIMCF7u+coPyNE/wZB6LQJsWweP5D5aiHODSyXv8VIw6sq4wqKBQfZePkshZ32RrBZbfSloSQYgHjqyFk/+097p1nf33OyGl3XsklBkV9ao/VCGVfi55SZCZQfEUsbGigVCn/kNzLguJxuBQ4UnjfsKuowXHxbJMz1QAYJvaO5AQ9KA6eYhY5JHo2NlnCZqhOweyWvjujhiyZdO7mDs13zq9thsnXhsyOySv+Wva8qmtdCoLkP10A7UVXop0l2fssFID5X1o8ld4KTDmzVGR2tviWY0M8g==",
+        "created_at": "2026-05-23T23:01:18.755516+00:00",
+        "state": "available"
+      },
+      "cb454ea8-06c2-499b-ac02-2830284d1436": {
+        "type": "signed_prekey",
+        "version": 1,
+        "prekey_id": "cb454ea8-06c2-499b-ac02-2830284d1436",
+        "algorithm": "X25519",
+        "public_key": "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VuAyEAXp/M+2EECzDW9VAVQEhyIeAgXx5qGTKamekctxmpTAw=\n-----END PUBLIC KEY-----\n",
+        "signature": "ai/fScYF/V8u9Ga6D55swwqAbGbDB67KPLWhMXYdItUTNhQHI8AkS2DSlUknrn/hjZTShOdwQ6dXIn1GfORtQBAqhUeZlOwSWnDg6cbXqtCflDO2hkO00mLgX9krsbcXgNJvXONOB7duLPj81Yk+gKLw7dktqlgzyyY8+BJmmKy3DDo3u/eHrm6nxpM0s8WGgxIj0lg6YmnLJBs9JAIkuXLvYImXvmxV33l+uoQl0eMRrwiR/qo9thG6L57jEQ5UwLxYFOYJeXIa/f3agjZAyQ5OOZuBNj8eIf85ZZeriHtN8vMltG4noo7w16mlexa1/khGYhR1bnHOSCDzckVSKw==",
+        "created_at": "2026-05-23T23:01:18.756089+00:00",
+        "state": "available"
+      },
+      "bea4eac7-e133-402c-891a-a6e11349bc94": {
+        "type": "signed_prekey",
+        "version": 1,
+        "prekey_id": "bea4eac7-e133-402c-891a-a6e11349bc94",
+        "algorithm": "X25519",
+        "public_key": "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VuAyEAVD/0/dva1aQLaaEcvbgCm9yBm/JWbMZH9AFYaoyG2xE=\n-----END PUBLIC KEY-----\n",
+        "signature": "hy3P31UD3KdR0pcsUf2ubw9+4rXq8sB9hcCI6FOmKg95hcNkUIJXcot5LngYgQ/E/oEGq23eFzrGx9AM2XWC2Tpz7NTW4TWJgGYMrDpWuORuaPVLahOLrNfKQ6CRJPXa89ZtOfLh57EjDvt0f0nyMrDuMJS4E9Eg6uwIxLoco5a9BoWoDGNfTzRf1z2rRG2rcptvSfEj5ICQfP7PZvnWbGDmF68QqObUTdZr5wda8VXlSb2Kl3OOrOGojiE0HPYmEnUp3AtDJrSh08obgv6cKLDmeLGBK8+TytF576nyp4rm5/D8QfQZWVipxgZh38GQUXFdewPrx1t92QUguj2EEg==",
+        "created_at": "2026-05-23T23:01:18.756768+00:00",
+        "state": "available"
+      },
+      "0f5cf9ac-cc6b-442e-a295-226d8aa4baf1": {
+        "type": "signed_prekey",
+        "version": 1,
+        "prekey_id": "0f5cf9ac-cc6b-442e-a295-226d8aa4baf1",
+        "algorithm": "X25519",
+        "public_key": "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VuAyEAtGLNLRfHPID/kfc0YH8A+spqLW2UWktciuk60VyS9DU=\n-----END PUBLIC KEY-----\n",
+        "signature": "ZupALMjVpj3yX4pFabJsoOA/MjcH854JvS0UomFfTHhbZbe68Uv8roOn1Nd9XGTECYe3H2Yru7zLUwVaSayxf7/5PWv+bnsWXqX6rnfBva8XiUWkz6HVeSsWpdcqIgVSJCuVusJKALD+mAmvQjcR/sJFYLwyz4ZHmY1TvEdjWGpKIdKmBIbiR3ZhlsikYIIWwMRDUpHMFM5CyTMNFWsSJCZ1tiWFmd0ql5h5H1a0dJM0P2diReyGJ9xuAbvLze6M8MMuct/FC/pw1s/KvtX+AQubIdQzaDVLotxf7AzROEbT7bLIFzKTg+L736gEEW0Y8TeQsMul+Ss9FxuVPwKNhw==",
+        "created_at": "2026-05-23T23:01:18.757399+00:00",
+        "state": "available"
+      },
+      "ca01f015-41cf-4dda-8d23-361f4d11575f": {
+        "type": "signed_prekey",
+        "version": 1,
+        "prekey_id": "ca01f015-41cf-4dda-8d23-361f4d11575f",
+        "algorithm": "X25519",
+        "public_key": "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VuAyEAKku3ELJN8aY4h2BZEoeYrtrJi97mQuYlBEYDVz/KVnE=\n-----END PUBLIC KEY-----\n",
+        "signature": "XEQOEu4pERdSfek4n2CzaTKH37Uolc/LYG2P5OyM4Wmcd+r0T3gC6nEdUl9y2dRnWNs/8pesDRLQL8ZfaZ5GL2sYzGWqJ8X8tq9uYhybdn5nhb3xTVCrCxSsaJ1QtnlMUWtdwQ5+9jpAfJnl81EfsVRua+201SFXz9fayLNpbCWrMJeeqtRSV1aTWN7ckgDJnCvpmiXD60cTmm+BzQouGd1HeR2FYi8j0pZe7+vl6Jt+fSZQ9gNSxYkuZAm41N8zFVq4g+YJvCYJnYcA9uyIaXSG3mc/RyHKY4CfusVoEqqUODKc267R55q2Szll3XUUr4oQ+Jvg09tuV19UaoFgCA==",
+        "created_at": "2026-05-23T23:01:18.757971+00:00",
+        "state": "available"
+      },
+      "cbff5022-a060-4839-ba53-5de1fe08422f": {
+        "type": "signed_prekey",
+        "version": 1,
+        "prekey_id": "cbff5022-a060-4839-ba53-5de1fe08422f",
+        "algorithm": "X25519",
+        "public_key": "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VuAyEAup8/bbeD74riXjuF4tEW3XxkqxauJzemWPMxXq+ajxM=\n-----END PUBLIC KEY-----\n",
+        "signature": "ru+P5ozvfQgWyiqMRX4rromwmRX6njQpTbsLuXZ+rLBhxfglg4YJShuhizyLDcH35E6rT8GGKeMoS9HRSGNQN0wVDbV+XxZtK4T3LuRMhljfRiyCQ6hsrpOnYGly3u9m9w7lvhMYxeAqPYHAhPufuou24rmkQtsfrfEuI/m6c2u6n2usXMST9xhLEm0SqYB6meIO8q+aNCOQalUu+CH5yAT/WLWvbzPWwBlBoP/NldVFTmBGUED+X3MioPQDVQ9KUomIDsL4v+8SuB6xZr+wghHC2A0gzAbAAzDHmY8k5UDFNieoXjQy70tpDlohCuEu9g9BxIfGyR574m1LiHQauA==",
+        "created_at": "2026-05-23T23:01:18.758551+00:00",
+        "state": "available"
+      },
+      "ffb32c77-2e6b-4269-b3fa-c1fb4e52c2c6": {
+        "type": "signed_prekey",
+        "version": 1,
+        "prekey_id": "ffb32c77-2e6b-4269-b3fa-c1fb4e52c2c6",
+        "algorithm": "X25519",
+        "public_key": "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VuAyEAoriBu3lkbP/78cshZAA6430tJ9Ha2KHimwUaxe/i3Rg=\n-----END PUBLIC KEY-----\n",
+        "signature": "JNiu0lRk9ohPhLAqew/toeyDJMTE5BRpAcGfFDE+Q+mS2+roTPveGXKuZK8OkUSw6heI10/EgtemoRQ5JZsD9jp8uIkV88JRYuk1U4MsZBGR9qzUIt6myWKNiYodK9pWEARDyrmJBlPDWK5iVz7kYj1iD2rdS4K6Tkh7rtmbROd/QB/J4SRIyDrWM3whTeAu70Ckn8y0ZsIcfZxOlxAePebA8UDRF1V2h5198ISEbvgDdvat30bCNu01VileYzrUKIVS7eeMJQoBcThGI/bQHgynLv+vUIwrWGc4/S1bUM1L/tsDrSE2PAdzdH46okoOFU40iXp8hybMZANY4siSLw==",
+        "created_at": "2026-05-23T23:13:01.659444+00:00",
+        "state": "available"
+      },
+      "1c2a6fce-51c2-4394-92c8-bb8df4082841": {
+        "type": "signed_prekey",
+        "version": 1,
+        "prekey_id": "1c2a6fce-51c2-4394-92c8-bb8df4082841",
+        "algorithm": "X25519",
+        "public_key": "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VuAyEAYbrHf2cZMMv4rsi+VqVnIj/P1W8zOMAvp8lcI7VXfR0=\n-----END PUBLIC KEY-----\n",
+        "signature": "ZILGFUsrJwYROFm21a5Yq4rjWpbcnLs7iP9Ny3jt8nmjDKltEAV4rF7iK3fVFsuLtQiIJzAsofRMOSGxPawr8e7IBJoTkIEjHI9ijFyRhHR6+xY4X0h/sLBqWITLkxWZ3VewD4i14MxAgz0HV7Z1hQy9KqEBMNoYo6svrwmogwH/WeKIH5BUfd7JeTv+YE8dYmH3tDFhSZz+s9OEtf3cqoMwK8o1HzsH6ToeYIbLznIwvFSPC9RbDHGsid5dtAUq4/NmyQ3SQWNSYGDJhip7sJkCwBBQz+uQOPOK0cFipLDx9We3ivMZjARrDHPalC6K/yB2vhEAUXNPm2D5MlIoPQ==",
+        "created_at": "2026-05-23T23:13:01.660238+00:00",
+        "state": "available"
+      },
+      "186104e3-55dd-400a-a088-c22c3bc41200": {
+        "type": "signed_prekey",
+        "version": 1,
+        "prekey_id": "186104e3-55dd-400a-a088-c22c3bc41200",
+        "algorithm": "X25519",
+        "public_key": "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VuAyEAmATzP9hBq4VBF7Nh9+D3ZJG1AHk7SMRDX+rbL9005GA=\n-----END PUBLIC KEY-----\n",
+        "signature": "JjMRBffQB+4wxYq3ACV/lbclZtUU7LsiyxhTW8pK99wbuAhNhnBekWDJrDMja8e1SzDz071SZioGLHwH6w0ACrtu1Mq81F0EYTfti5GFxCHes5f2daOntmy3DWMZcsQz3eRcTNi9SDjF46VTvMnBvsCmcJbrNHmHm1cfLLLkIVrcaLBBNzOGQbMhu3yMyBKu8+4yEtvcq+fkE/p+/E+lZBK5Jno+RR9wAI4N4/glWN0c5B07muVnZaMt10MjA1PdpfZU3iR2TERHlegYEuVw29rBnKIwXGAbLs41kadTFoSHPMhuAJBK4o0hzE3ROj6bYHvniMK/jFfbPCbB9kzh6A==",
+        "created_at": "2026-05-23T23:13:01.660890+00:00",
+        "state": "available"
+      },
+      "e4582ff4-0249-45ee-8b39-2a0c7ec77b4d": {
+        "type": "signed_prekey",
+        "version": 1,
+        "prekey_id": "e4582ff4-0249-45ee-8b39-2a0c7ec77b4d",
+        "algorithm": "X25519",
+        "public_key": "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VuAyEAtlae9JLMfsU7+H28V0TK7+OuRA3oou6ZFrc/YOg6/SM=\n-----END PUBLIC KEY-----\n",
+        "signature": "DnDmKs+W9htrmd6/6WwBNvVFHoBdyla/g9dUaKyPXPRz36DcIXszMSt6fyZNiaW/4vIIkDSl7DQC36BUAXseaKorEkddo6SnTAI+I4tDPEB7JramFS9lSNoHo/4mjes47SCpxAMpLlb5IKSM3EqGoa5pj05IDoxJZZq0yJ1X9xAf7VtZ+NAoTaeEZ81yxzkAHApy8YHSZXTxjBI/L3hik5SNuQtiCRUX7eY8KwKYnlwrF9lXzIQehhHbnBGiUa/kChol1uLfuq8xF1xIdv+0h4Gs0z5PN85gSDoWuAFO5mJp2zmzofrpcgSrlkrms4WpqDxQe0J+3tcKmVZgnqrofQ==",
+        "created_at": "2026-05-23T23:13:01.661477+00:00",
+        "state": "available"
+      },
+      "b7c3d130-5a2a-4ec6-a8ab-504b05eb0c94": {
+        "type": "signed_prekey",
+        "version": 1,
+        "prekey_id": "b7c3d130-5a2a-4ec6-a8ab-504b05eb0c94",
+        "algorithm": "X25519",
+        "public_key": "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VuAyEAC5riBhDuK4cRQmJ2L/sz+expKAxz3Ryg6o+LE7XjBw4=\n-----END PUBLIC KEY-----\n",
+        "signature": "niYbgLKSRHthvJ0SvPQkVLXR2cpm5naS3Uzw1IBRS4OQy6/XVTBCIN3vfjVeB4+PfZDy/KZTY8peyPgX+8ZhrsPF3pPa4YT5jdgm4P2BqK+o1Q+aOlQ4SMc30b7ViiqnIf89URglUFMojaS12HNhKVhG4i50Z/MRzpqNtAAj9W/mCAe2hCKMK/WIfyodFtgeGU9wmVuaa+zV43wgPw2p+pAeZB/D2D4rSYoiHCi/MIpOO2ErqwkZjmnxmdD/SS4KKFyYDRxbCo37WSN/V3oudwF3ZCyf7nOPSOuYVbVNApSQzUg1Yw7T9sYV2pjsLKYJdCOHWacQV2x1EtQdvLS+ww==",
+        "created_at": "2026-05-23T23:13:01.662043+00:00",
+        "state": "available"
+      },
+      "ccbd5279-7aff-441f-a7e2-b39bc362e8fe": {
+        "type": "signed_prekey",
+        "version": 1,
+        "prekey_id": "ccbd5279-7aff-441f-a7e2-b39bc362e8fe",
+        "algorithm": "X25519",
+        "public_key": "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VuAyEAlRaQ3dEx6CdK4T7K8GrJ9s4Z3KuGjMKv/7DQW59Y8x0=\n-----END PUBLIC KEY-----\n",
+        "signature": "IMMyUwS16gFgNtXR1FzALscN5w8KtnsMJbuCi8jWGEBKHwW2Fuablx3szHhVywim1+kjVX2yDIwa/+OtbvB06PcQQkk0R6wUhCBV+CSzQENshrjLNxBhzchxSs0AUW9IpnYnCyZPahHwxL8Us9fqhMZV6aCOqT/mGD8QZmjaf0Mw7ZRUIJU94IX6gD5ofiXVrIawhSckCdpSIVACikp/vHIV5wswMBvNd/LMhOvg2sa6YPv3J5sPrBqqvPmbmDEQQaYEr2xmGY6QwDEVEmY18Exa82KF9lKZoqFfO3iIlxm99PwanIa5gJKjrJTYSPsz5GR0AQEfg2P2o0GNDk3LZw==",
+        "created_at": "2026-05-23T23:13:01.662683+00:00",
+        "state": "available"
+      },
+      "1d21c5d9-50d0-450d-8614-1c1d97d31d87": {
+        "type": "signed_prekey",
+        "version": 1,
+        "prekey_id": "1d21c5d9-50d0-450d-8614-1c1d97d31d87",
+        "algorithm": "X25519",
+        "public_key": "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VuAyEAgoQ0dDpA2l44rWhDlNKIiXdfrcSnUW3LNvQ/SBq8Z3A=\n-----END PUBLIC KEY-----\n",
+        "signature": "Hm946G/k4RXQk9sT5PN8GI7neInxO7z+qIlmuslQllJKxwOwn29sT3ZsG8aAXyNJN0ajpnZgqkG/jfCYujnJqGtt6hS+pGFFQVNN2Y+WDeIZDjCviUb22VZ+xJVoqPIwXM8Q8n2TcKJkRv8ELvTFI7zZbGFWvdZ7l1WPvAdyBvF+W40mGQC961JOu7W890y4VutQ5NUhkFqT+vFk1YU3axeAJbwIBjzaKcTwMc40Js/qOTTfhikJ4y2pDpA6opxIYPwtO0l/lC/AyV0X/ukOdr1oMVoV2hJqxowOA9CjzadPv6rjsaPrD3yBUvW4w5UE/2g8WwgHuHDAEU6tarknng==",
+        "created_at": "2026-05-23T23:13:01.663259+00:00",
+        "state": "available"
+      },
+      "16c1eeae-42dd-44ad-98af-bda896b6e58c": {
+        "type": "signed_prekey",
+        "version": 1,
+        "prekey_id": "16c1eeae-42dd-44ad-98af-bda896b6e58c",
+        "algorithm": "X25519",
+        "public_key": "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VuAyEAJulal2PDEyLakW2aXTfpL6ST9dhi9duryOxTieKjO0E=\n-----END PUBLIC KEY-----\n",
+        "signature": "QUvWa3WbMDooUjVrHFik75io5C/Bw8PfurX3SUzrVgQSP7efDe3lnJCZ5innydCi+6tGKvDZ83xczV+wJJZX3v24/UWMN5VZIdSjGc1gf1+j+nfd7e81q5OmQRNLv+shtSstuJx/NgLL6b6gFh0gCQlR4vq8n59lr3aeHWCzZRR7eHciy/cVw5M1BRJiDgEsKEvNz/V6WvnoCtVrIL55T3uuhBquLBekAFU+V9d04ivL0GJVDZzX+arYkR6vPOwJENo5Gxiq/g6AY+7Z6t4GTqN5kS/hw9mJj0Ds5ze69XGKFJw66oHpe/DxvdFlaz8/JuxiWfi8+PcBr20rabufzQ==",
+        "created_at": "2026-05-23T23:13:01.663922+00:00",
+        "state": "available"
+      },
+      "94e50234-700a-4dd5-99ef-60bc266e514d": {
+        "type": "signed_prekey",
+        "version": 1,
+        "prekey_id": "94e50234-700a-4dd5-99ef-60bc266e514d",
+        "algorithm": "X25519",
+        "public_key": "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VuAyEAV7BdcQUKmYq037+CrGvPEcYBwKz2MBhLFM1Vwi7aJnc=\n-----END PUBLIC KEY-----\n",
+        "signature": "CDe1/PCMdWi0Ifn5Jw6xQJX0ysNhvezMevuAg96Y24uubqwsXhDXkRM581ogbmF4MkkMaqbiRuUBbyb5wbyPM3DuJZLGJrFMVVswNWFoOvqB68ybC+dpfvMDp3kMhGXTYZja/nX/KiqHJiHQMwBrP6jgdsua/NDsBqYo9AHwaQ124jFp9lZk2CBfYoBd9Z0w/j0XCBuFI1CYnA62roUCnkXPgGs+GklMqCbyHioezbK3GgmeaNHxWQGXxyQ1vDL6AfwyD0+atDyoRBYXCsuV84qahkFCHIjVT7/MOtn3pqFkabtb8TCtJPWC5RHynTlOAJWDKZbz3onDu1wymr+zTA==",
+        "created_at": "2026-05-23T23:13:01.664838+00:00",
+        "state": "available"
+      },
+      "5ae5c8d4-0486-42be-a629-01a8f3d1de94": {
+        "type": "signed_prekey",
+        "version": 1,
+        "prekey_id": "5ae5c8d4-0486-42be-a629-01a8f3d1de94",
+        "algorithm": "X25519",
+        "public_key": "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VuAyEAT1+jvbmBd3JOlWDzP70wX6zjG1jlZeD6moniSiR73Ac=\n-----END PUBLIC KEY-----\n",
+        "signature": "KyQBhq8kJhS0W3USRL/7cL6I0ScUBsfbzbKCBl49OscJjqRShkTMzBZTs+7Zd+h95qrWXcmf6DlWdtyD0vySYMrFw9YepfMnZeOixmyKK51q59d8ffGiZpohcnIcEb/uHT0jpIuvwXrMSGrPnXlLhNBk1u/wSv/o/InskUKbruu6qDsEDPkMDXLTWhZ7kVXHs5gRIdh6GpmTC0AFIPH0GRbsJOVrR6uuPd+NMmVfNB6NQyWjARdFGtBLBEAQ56RPVtJ8pJHo1Q/aM3JzwiJFrOWaCDSX1LsB1tm+IilVTkpfiWXQhDv2WuA7X10om+oQmGK3MRODWhDhBi/DJCflpg==",
+        "created_at": "2026-05-23T23:13:01.665455+00:00",
+        "state": "available"
+      }
     }
   },
   "henrique": {

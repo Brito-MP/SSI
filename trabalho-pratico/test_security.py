@@ -8,12 +8,13 @@ python3 test_security.py
 import os
 import base64
 import copy
+import io
 import json
 import sys
 import tempfile
 import threading
 import time
-from contextlib import contextmanager
+from contextlib import contextmanager, redirect_stdout
 from pathlib import Path
 from cryptography.hazmat.primitives.asymmetric import rsa
 
@@ -34,32 +35,68 @@ from handlers.file_handler import (
     cmd_export_msg,
     cmd_import_bundle,
     cmd_import_msg,
+    identity_key_fingerprint,
     import_public_bundle,
+    load_imported_bundles,
 )
 from handlers.message_handler import (
+    build_online_session_message_envelope,
+    build_offline_prekey_message_envelope,
     build_group_message_envelope,
     build_group_message_payload,
     build_message_envelope,
+    build_session_handshake_envelope,
     cmd_remove_group_member,
+    cmd_send_group,
+    cmd_sync,
+    get_online_session_winning_initiator,
+    get_group_rotation_leader,
+    group_control_plaintext,
+    handle_group_key_share_message,
+    handle_group_leave_message,
     group_key_share_plaintext,
     process_incoming_message,
     rotate_group_key,
+    store_online_session,
+    sync_pending_messages,
+)
+from handlers.prekey_handler import (
+    generate_and_store_signed_prekeys,
+    load_local_prekeys,
+    load_private_prekey,
 )
 import storage
 from crypto_utils import (
+    ONLINE_SESSION_MESSAGE_ALGORITHM,
+    ONLINE_SESSION_MESSAGE_TYPE,
+    ONLINE_SESSION_MESSAGE_VERSION,
+    OFFLINE_PREKEY_MESSAGE_ALGORITHM,
+    OFFLINE_PREKEY_MESSAGE_TYPE,
+    OFFLINE_PREKEY_MESSAGE_VERSION,
+    SESSION_INIT_TYPE,
+    SESSION_RESPONSE_TYPE,
+    SIGNED_PREKEY_ALGORITHM,
+    build_online_session_aad,
+    build_group_aad,
     build_message_aad,
+    decrypt_online_session_message,
     decrypt_group_payload,
     decrypt_from_sender,
+    decrypt_from_signed_prekey,
     e2ee_public_key_binding_bytes,
     encrypt_group_payload,
     encrypt_for_recipient,
     encrypt_for_recipient_v2,
+    encrypt_for_signed_prekey,
     generate_group_key,
+    generate_signed_prekey,
     generate_x25519_keypair,
     GROUP_KEY_SHARE_TYPE,
     GROUP_MESSAGE_TYPE,
+    derive_online_session_key,
     normalize_contact_list,
     normalize_groups,
+    private_key_to_pem,
     protect_contacts,
     protect_groups,
     public_key_to_pem,
@@ -67,15 +104,22 @@ from crypto_utils import (
     unprotect_contacts,
     unprotect_groups,
     verify_signature,
+    verify_session_ephemeral_signature,
+    verify_signed_prekey,
+    x25519_public_key_from_pem,
 )
 from server.server import (
+    SIGNED_PREKEYS_FIELD,
     can_set_e2ee_public_key,
     deliver_or_store_message,
     is_valid_envelope,
     online_users,
     online_users_lock,
+    pop_available_signed_prekey,
     pop_pending_messages,
+    publish_signed_prekeys_for_user,
 )
+from client_start import initialize_logged_in_client
 
 
 def generate_rsa_keypair():
@@ -179,7 +223,7 @@ def signed_group_message_envelope(
     group = group_model(group_key)
     timestamp = "2026-05-22T18:00:00Z"
     payload = build_group_message_payload("alice", "group-equipa", group, text, message_id, timestamp)
-    aad = build_message_aad(message_id, "alice", target, timestamp)
+    aad = build_group_aad("group-equipa", "alice", target, message_id, timestamp)
     encrypted = encrypt_group_payload(group_key, payload, aad)
     return build_group_message_envelope(
         "alice",
@@ -190,6 +234,41 @@ def signed_group_message_envelope(
         timestamp,
         sender_private_key,
     )
+
+
+def derive_test_online_session(session_id="session-test-1"):
+    alice_ephemeral_private, alice_ephemeral_public = generate_x25519_keypair()
+    bob_ephemeral_private, bob_ephemeral_public = generate_x25519_keypair()
+    alice_ephemeral_public_pem = public_key_to_pem(alice_ephemeral_public)
+    bob_ephemeral_public_pem = public_key_to_pem(bob_ephemeral_public)
+
+    alice_shared_secret = alice_ephemeral_private.exchange(bob_ephemeral_public)
+    bob_shared_secret = bob_ephemeral_private.exchange(alice_ephemeral_public)
+    alice_session_key = derive_online_session_key(
+        alice_shared_secret,
+        session_id,
+        "alice",
+        "bob",
+        alice_ephemeral_public_pem,
+        bob_ephemeral_public_pem,
+    )
+    bob_session_key = derive_online_session_key(
+        bob_shared_secret,
+        session_id,
+        "alice",
+        "bob",
+        alice_ephemeral_public_pem,
+        bob_ephemeral_public_pem,
+    )
+    return {
+        "session_id": session_id,
+        "alice_private": alice_ephemeral_private,
+        "alice_public_pem": alice_ephemeral_public_pem,
+        "bob_private": bob_ephemeral_private,
+        "bob_public_pem": bob_ephemeral_public_pem,
+        "alice_session_key": alice_session_key,
+        "bob_session_key": bob_session_key,
+    }
 
 
 class FakeSocket:
@@ -439,6 +518,723 @@ def test_e2ee_public_key_overwrite_rejected():
     print("OK - overwrite indevido rejeitado")
 
 
+def test_signed_prekey_generation_and_signature_validation():
+    print("\n[TESTE] Signed prekey X25519 é assinada pela identity key")
+
+    alice = make_user_state("alice")
+    prekey, private_prekey = generate_signed_prekey("alice", alice.private_key)
+
+    assert prekey["type"] == "signed_prekey"
+    assert prekey["version"] == 1
+    assert prekey["algorithm"] == SIGNED_PREKEY_ALGORITHM
+    assert isinstance(prekey["prekey_id"], str)
+    assert "PRIVATE KEY" not in json.dumps(prekey)
+    assert private_key_to_pem(private_prekey) not in json.dumps(prekey)
+    assert verify_signed_prekey("alice", alice.public_key, prekey)
+
+    tampered_id = copy.deepcopy(prekey)
+    tampered_id["prekey_id"] = "prekey-adulterada"
+    assert not verify_signed_prekey("alice", alice.public_key, tampered_id)
+
+    tampered_time = copy.deepcopy(prekey)
+    tampered_time["created_at"] = "2026-05-23T00:00:00Z"
+    assert not verify_signed_prekey("alice", alice.public_key, tampered_time)
+
+    _, other_public_key = generate_x25519_keypair()
+    tampered_key = copy.deepcopy(prekey)
+    tampered_key["public_key"] = public_key_to_pem(other_public_key)
+    assert not verify_signed_prekey("alice", alice.public_key, tampered_key)
+
+    print("OK - assinatura cobre id/public_key/created_at")
+
+
+def test_private_prekey_stays_in_local_store_only():
+    print("\n[TESTE] Private prekey fica só no armazenamento local")
+
+    bob = make_user_state("bob")
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        bob.prekeys_path = os.path.join(tmp_dir, "bob_prekeys.json")
+        public_prekeys = generate_and_store_signed_prekeys(bob, 1)
+        stored = load_local_prekeys(bob)
+
+    prekey = public_prekeys[0]
+    entry = stored[prekey["prekey_id"]]
+    assert "private_key" in entry
+    assert entry["used"] is False
+    assert entry["public_key"] == prekey["public_key"]
+    assert "private_key" not in json.dumps(prekey)
+    assert entry["private_key"] not in json.dumps(prekey)
+
+    print("OK - bundle público da prekey não contém chave privada")
+
+
+def test_server_stores_only_public_signed_prekeys_and_rejects_bad_ones():
+    print("\n[TESTE] Servidor guarda só signed prekeys públicas válidas")
+
+    bob = make_user_state("bob")
+    user_data = {
+        "public_key": public_key_to_pem(bob.public_key),
+        "certificate": "bob-certificate",
+    }
+    good_prekey, private_prekey = generate_signed_prekey("bob", bob.private_key)
+
+    accepted = publish_signed_prekeys_for_user(user_data, "bob", [good_prekey])
+    duplicate = publish_signed_prekeys_for_user(user_data, "bob", [good_prekey])
+    stored_json = json.dumps(user_data)
+
+    assert accepted == [good_prekey["prekey_id"]]
+    assert duplicate == []
+    assert SIGNED_PREKEYS_FIELD in user_data
+    assert private_key_to_pem(private_prekey) not in stored_json
+    assert "private_key" not in stored_json
+    assert user_data[SIGNED_PREKEYS_FIELD][good_prekey["prekey_id"]]["state"] == "available"
+
+    malformed = copy.deepcopy(good_prekey)
+    malformed.pop("signature")
+    try:
+        publish_signed_prekeys_for_user(user_data, "bob", [malformed])
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("servidor aceitou signed prekey malformada")
+
+    print("OK - servidor valida e não guarda private prekeys")
+
+
+def test_server_returns_signed_prekey_once():
+    print("\n[TESTE] Servidor entrega signed prekey uma só vez")
+
+    bob = make_user_state("bob")
+    user_data = {
+        "public_key": public_key_to_pem(bob.public_key),
+        "certificate": "bob-certificate",
+    }
+    prekey, _ = generate_signed_prekey("bob", bob.private_key)
+    publish_signed_prekeys_for_user(user_data, "bob", [prekey])
+
+    fetched = pop_available_signed_prekey(user_data)
+    reused = pop_available_signed_prekey(user_data)
+
+    assert fetched["prekey_id"] == prekey["prekey_id"]
+    assert verify_signed_prekey("bob", bob.public_key, fetched)
+    assert reused is None
+    assert user_data[SIGNED_PREKEYS_FIELD][prekey["prekey_id"]]["state"] == "used"
+
+    print("OK - prekey pública é marcada como usada no servidor")
+
+
+def test_offline_prekey_message_roundtrip_and_consumes_private_prekey():
+    print("\n[TESTE] Mensagem offline usa signed prekey e consome private prekey")
+
+    alice = make_user_state("alice")
+    bob = make_user_state("bob")
+    bob.key_cache["alice"] = alice.public_key
+
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        bob.prekeys_path = os.path.join(tmp_dir, "bob_prekeys.json")
+        public_prekey = generate_and_store_signed_prekeys(bob, 1)[0]
+        envelope = build_offline_prekey_message_envelope(
+            "alice",
+            "bob",
+            "segredo offline com prekey",
+            alice.private_key,
+            public_prekey,
+        )
+        serialized = json.dumps(envelope, ensure_ascii=False)
+
+        assert envelope["type"] == OFFLINE_PREKEY_MESSAGE_TYPE
+        assert envelope["version"] == OFFLINE_PREKEY_MESSAGE_VERSION
+        assert envelope["algorithm"] == OFFLINE_PREKEY_MESSAGE_ALGORITHM
+        assert envelope["prekey_id"] == public_prekey["prekey_id"]
+        assert "ephemeral_public_key" in envelope
+        assert set(envelope["payload"].keys()) == {"nonce", "ciphertext"}
+        assert "segredo offline com prekey" not in serialized
+        assert "PRIVATE KEY" not in serialized
+        assert is_valid_envelope(envelope)
+
+        process_incoming_message(envelope, bob)
+        stored = load_local_prekeys(bob)
+
+        assert bob.conversations["alice"][0]["text"] == "segredo offline com prekey"
+        used_entry = stored[public_prekey["prekey_id"]]
+        assert used_entry["used"] is True
+        assert isinstance(used_entry["destroyed_at"], str) and used_entry["destroyed_at"]
+        assert "private_key" not in used_entry
+        assert "PRIVATE KEY" not in json.dumps(stored)
+        try:
+            load_private_prekey(bob, public_prekey["prekey_id"])
+        except ValueError:
+            pass
+        else:
+            raise AssertionError("private prekey usada continuou reutilizável")
+
+    print("OK - Bob decifra, destrói private prekey e bloqueia reutilização")
+
+
+def test_offline_prekey_message_fails_without_private_prekey():
+    print("\n[TESTE] Mensagem offline falha sem private prekey local")
+
+    alice = make_user_state("alice")
+    bob = make_user_state("bob")
+    bob.key_cache["alice"] = alice.public_key
+    public_prekey, _ = generate_signed_prekey("bob", bob.private_key)
+
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        bob.prekeys_path = os.path.join(tmp_dir, "missing_prekeys.json")
+        envelope = build_offline_prekey_message_envelope(
+            "alice",
+            "bob",
+            "não deve abrir",
+            alice.private_key,
+            public_prekey,
+        )
+        process_incoming_message(envelope, bob)
+
+    assert bob.conversations == {}
+
+    print("OK - prekey_id desconhecida falha sem plaintext")
+
+
+def test_offline_prekey_message_rejects_aad_and_ciphertext_tampering():
+    print("\n[TESTE] Mensagem offline com prekey rejeita adulteração")
+
+    bob = make_user_state("bob")
+    public_prekey, private_prekey = generate_signed_prekey("bob", bob.private_key)
+    encrypted = encrypt_for_signed_prekey(
+        "texto autenticado por prekey",
+        public_prekey,
+        "alice",
+        "bob",
+        "offline-aad-1",
+        "2026-05-23T12:00:00Z",
+    )
+
+    plaintext = decrypt_from_signed_prekey(
+        encrypted["payload"],
+        private_prekey,
+        encrypted["ephemeral_public_key"],
+        encrypted["prekey_id"],
+        "alice",
+        "bob",
+        "offline-aad-1",
+        "2026-05-23T12:00:00Z",
+    )
+    assert plaintext == "texto autenticado por prekey"
+
+    tamper_cases = [
+        {"message_id": "offline-aad-2"},
+        {"sender": "mallory"},
+        {"recipient": "carla"},
+        {"timestamp": "2026-05-23T12:01:00Z"},
+        {"prekey_id": "prekey-errada"},
+    ]
+    for tamper in tamper_cases:
+        try:
+            decrypt_from_signed_prekey(
+                encrypted["payload"],
+                private_prekey,
+                encrypted["ephemeral_public_key"],
+                tamper.get("prekey_id", encrypted["prekey_id"]),
+                tamper.get("sender", "alice"),
+                tamper.get("recipient", "bob"),
+                tamper.get("message_id", "offline-aad-1"),
+                tamper.get("timestamp", "2026-05-23T12:00:00Z"),
+            )
+        except Exception:
+            pass
+        else:
+            raise AssertionError(f"adulteração aceite: {tamper}")
+
+    bad_payload = copy.deepcopy(encrypted["payload"])
+    ciphertext = bytearray(base64.b64decode(bad_payload["ciphertext"]))
+    ciphertext[0] ^= 1
+    bad_payload["ciphertext"] = base64.b64encode(ciphertext).decode()
+    try:
+        decrypt_from_signed_prekey(
+            bad_payload,
+            private_prekey,
+            encrypted["ephemeral_public_key"],
+            encrypted["prekey_id"],
+            "alice",
+            "bob",
+            "offline-aad-1",
+            "2026-05-23T12:00:00Z",
+        )
+    except Exception:
+        pass
+    else:
+        raise AssertionError("ciphertext adulterado aceite")
+
+    print("OK - AAD e ciphertext adulterados falham")
+
+
+def test_online_session_handshake_signature_validation():
+    print("\n[TESTE] Handshake online assina ephemeral public key e rejeita adulteração")
+
+    alice = make_user_state("alice")
+    bob = make_user_state("bob")
+    session = derive_test_online_session("online-session-signature-1")
+    init = build_session_handshake_envelope(
+        SESSION_INIT_TYPE,
+        session["session_id"],
+        "alice",
+        "bob",
+        session["alice_public_pem"],
+        alice.private_key,
+    )
+
+    assert init["message_id"] == session["session_id"]
+    assert x25519_public_key_from_pem(init["ephemeral_public_key"]) is not None
+    assert verify_session_ephemeral_signature(init, alice.public_key)
+
+    _, other_ephemeral_public = generate_x25519_keypair()
+    tamper_cases = [
+        ("ephemeral_public_key", public_key_to_pem(other_ephemeral_public)),
+        ("session_id", "online-session-signature-2"),
+        ("from", "mallory"),
+        ("to", "carla"),
+        ("timestamp", "2026-05-23T12:01:00Z"),
+    ]
+    for field, value in tamper_cases:
+        tampered = copy.deepcopy(init)
+        tampered[field] = value
+        if field == "session_id":
+            tampered["message_id"] = value
+        assert not verify_session_ephemeral_signature(tampered, alice.public_key)
+
+    response = build_session_handshake_envelope(
+        SESSION_RESPONSE_TYPE,
+        session["session_id"],
+        "bob",
+        "alice",
+        session["bob_public_pem"],
+        bob.private_key,
+    )
+    assert verify_session_ephemeral_signature(response, bob.public_key)
+
+    print("OK - assinatura canónica do handshake protege identidade e ephemeral key")
+
+
+def test_online_session_key_derivation_matches_and_is_fresh():
+    print("\n[TESTE] DH efémero online deriva a mesma session_key e varia por sessão")
+
+    session = derive_test_online_session("online-session-kdf-1")
+    assert session["alice_session_key"] == session["bob_session_key"]
+    assert len(session["alice_session_key"]) == 32
+
+    shared_secret = session["alice_private"].exchange(x25519_public_key_from_pem(session["bob_public_pem"]))
+    changed_context_key = derive_online_session_key(
+        shared_secret,
+        "online-session-kdf-2",
+        "alice",
+        "bob",
+        session["alice_public_pem"],
+        session["bob_public_pem"],
+    )
+    fresh_session = derive_test_online_session("online-session-kdf-3")
+
+    assert changed_context_key != session["alice_session_key"]
+    assert fresh_session["alice_session_key"] != session["alice_session_key"]
+
+    print("OK - HKDF usa DH e contexto de sessão")
+
+
+def test_online_session_handshake_processing_creates_memory_only_sessions():
+    print("\n[TESTE] Processamento de session_init/session_response cria sessão só em memória")
+
+    alice = make_user_state("alice")
+    bob = make_user_state("bob")
+    alice.key_cache["bob"] = bob.public_key
+    bob.key_cache["alice"] = alice.public_key
+
+    session = derive_test_online_session("online-session-process-1")
+    init = build_session_handshake_envelope(
+        SESSION_INIT_TYPE,
+        session["session_id"],
+        "alice",
+        "bob",
+        session["alice_public_pem"],
+        alice.private_key,
+    )
+    bob.sock = FakeSocket()
+
+    process_incoming_message(init, bob)
+
+    assert "alice" in bob.online_sessions
+    assert bob.online_sessions["alice"]["role"] == "responder"
+    assert "session_key" in bob.online_sessions["alice"]
+    assert "ephemeral_private_key" not in bob.online_sessions["alice"]
+    assert bob.sock.sent
+
+    response_frame = json.loads(bob.sock.sent[-1].decode("utf-8"))
+    assert response_frame["command"] == "relay_session_envelope"
+    response = {key: value for key, value in response_frame.items() if key != "command"}
+    assert response["type"] == SESSION_RESPONSE_TYPE
+    assert response["session_id"] == session["session_id"]
+    assert verify_session_ephemeral_signature(response, bob.public_key)
+
+    alice.pending_online_sessions["bob"] = {
+        "session_id": session["session_id"],
+        "ephemeral_private_key": session["alice_private"],
+        "own_ephemeral_public_key": session["alice_public_pem"],
+        "created_at": "2026-05-23T12:00:00Z",
+    }
+    process_incoming_message(response, alice)
+
+    assert "bob" in alice.online_sessions
+    assert "bob" not in alice.pending_online_sessions
+    assert alice.online_sessions["bob"]["role"] == "initiator"
+    assert "ephemeral_private_key" not in alice.online_sessions["bob"]
+    assert alice.online_sessions["bob"]["session_key"] == bob.online_sessions["alice"]["session_key"]
+
+    print("OK - ephemeral private key é descartada depois da derivação")
+
+
+def test_online_session_normal_handshake_accepts_larger_username_initiator_without_conflict():
+    print("\n[TESTE] Handshake online normal aceita iniciador lexicograficamente maior")
+
+    alice = make_user_state("alice")
+    bob = make_user_state("bob")
+    alice.key_cache["bob"] = bob.public_key
+    bob.key_cache["alice"] = alice.public_key
+    alice.sock = FakeSocket()
+
+    session_id = "normal-bob-initiated-session"
+    bob_ephemeral_private, bob_ephemeral_public = generate_x25519_keypair()
+    bob_ephemeral_public_pem = public_key_to_pem(bob_ephemeral_public)
+    bob.pending_online_sessions["alice"] = {
+        "session_id": session_id,
+        "ephemeral_private_key": bob_ephemeral_private,
+        "own_ephemeral_public_key": bob_ephemeral_public_pem,
+        "created_at": "2026-05-23T12:00:00Z",
+    }
+
+    init = build_session_handshake_envelope(
+        SESSION_INIT_TYPE,
+        session_id,
+        "bob",
+        "alice",
+        bob_ephemeral_public_pem,
+        bob.private_key,
+    )
+    process_incoming_message(init, alice)
+
+    assert alice.online_sessions["bob"]["session_id"] == session_id
+    assert alice.online_sessions["bob"]["initiator"] == "bob"
+    assert alice.sock.sent
+
+    response_frame = json.loads(alice.sock.sent[-1].decode("utf-8"))
+    response = {key: value for key, value in response_frame.items() if key != "command"}
+    process_incoming_message(response, bob)
+
+    assert bob.online_sessions["alice"]["session_id"] == session_id
+    assert bob.online_sessions["alice"]["initiator"] == "bob"
+    assert bob.online_sessions["alice"]["session_key"] == alice.online_sessions["bob"]["session_key"]
+    assert bob.pending_online_sessions == {}
+
+    print("OK - regra de desempate só atua quando há conflito local")
+
+
+def test_simultaneous_online_session_handshake_uses_deterministic_winner():
+    print("\n[TESTE] Handshake online simultâneo escolhe vencedor determinístico")
+
+    alice = make_user_state("alice")
+    bob = make_user_state("bob")
+    alice.key_cache["bob"] = bob.public_key
+    bob.key_cache["alice"] = alice.public_key
+    alice.sock = FakeSocket()
+    bob.sock = FakeSocket()
+
+    alice_session_id = "simultaneous-alice-session"
+    bob_session_id = "simultaneous-bob-session"
+    alice_ephemeral_private, alice_ephemeral_public = generate_x25519_keypair()
+    bob_ephemeral_private, bob_ephemeral_public = generate_x25519_keypair()
+    alice_ephemeral_public_pem = public_key_to_pem(alice_ephemeral_public)
+    bob_ephemeral_public_pem = public_key_to_pem(bob_ephemeral_public)
+
+    alice.pending_online_sessions["bob"] = {
+        "session_id": alice_session_id,
+        "ephemeral_private_key": alice_ephemeral_private,
+        "own_ephemeral_public_key": alice_ephemeral_public_pem,
+        "created_at": "2026-05-23T12:00:00Z",
+    }
+    bob.pending_online_sessions["alice"] = {
+        "session_id": bob_session_id,
+        "ephemeral_private_key": bob_ephemeral_private,
+        "own_ephemeral_public_key": bob_ephemeral_public_pem,
+        "created_at": "2026-05-23T12:00:00Z",
+    }
+
+    alice_init = build_session_handshake_envelope(
+        SESSION_INIT_TYPE,
+        alice_session_id,
+        "alice",
+        "bob",
+        alice_ephemeral_public_pem,
+        alice.private_key,
+    )
+    bob_init = build_session_handshake_envelope(
+        SESSION_INIT_TYPE,
+        bob_session_id,
+        "bob",
+        "alice",
+        bob_ephemeral_public_pem,
+        bob.private_key,
+    )
+
+    assert get_online_session_winning_initiator("alice", "bob") == "alice"
+
+    process_incoming_message(bob_init, alice)
+    assert "bob" not in alice.online_sessions
+    assert alice.pending_online_sessions["bob"]["session_id"] == alice_session_id
+    assert alice.sock.sent == []
+
+    process_incoming_message(alice_init, bob)
+    assert bob.online_sessions["alice"]["session_id"] == alice_session_id
+    assert bob.online_sessions["alice"]["initiator"] == "alice"
+    assert "alice" not in bob.pending_online_sessions
+    assert bob.sock.sent
+
+    response_frame = json.loads(bob.sock.sent[-1].decode("utf-8"))
+    winning_response = {key: value for key, value in response_frame.items() if key != "command"}
+    assert winning_response["type"] == SESSION_RESPONSE_TYPE
+    assert winning_response["session_id"] == alice_session_id
+
+    _, stale_response_public = generate_x25519_keypair()
+    losing_response = build_session_handshake_envelope(
+        SESSION_RESPONSE_TYPE,
+        bob_session_id,
+        "alice",
+        "bob",
+        public_key_to_pem(stale_response_public),
+        alice.private_key,
+    )
+    process_incoming_message(losing_response, bob)
+    assert bob.online_sessions["alice"]["session_id"] == alice_session_id
+
+    process_incoming_message(winning_response, alice)
+    assert alice.online_sessions["bob"]["session_id"] == alice_session_id
+    assert bob.online_sessions["alice"]["session_id"] == alice_session_id
+    assert alice.online_sessions["bob"]["session_key"] == bob.online_sessions["alice"]["session_key"]
+    assert alice.online_sessions["bob"]["initiator"] == "alice"
+    assert bob.online_sessions["alice"]["initiator"] == "alice"
+    assert alice.pending_online_sessions == {}
+    assert bob.pending_online_sessions == {}
+
+    envelope = build_online_session_message_envelope(alice, "bob", "mensagem após handshake simultâneo")
+    process_incoming_message(envelope, bob)
+
+    assert bob.conversations["alice"][0]["text"] == "mensagem após handshake simultâneo"
+
+    print("OK - só o handshake iniciado por alice permanece e cifra mensagens futuras")
+
+
+def test_online_session_message_roundtrip_and_tamper_detection():
+    print("\n[TESTE] Mensagem online usa session_key, AAD e counters")
+
+    alice = make_user_state("alice")
+    bob = make_user_state("bob")
+    alice.key_cache["bob"] = bob.public_key
+    bob.key_cache["alice"] = alice.public_key
+    session = derive_test_online_session("online-session-message-1")
+
+    store_online_session(
+        alice,
+        "bob",
+        session["session_id"],
+        "initiator",
+        session["alice_session_key"],
+        session["alice_public_pem"],
+        session["bob_public_pem"],
+    )
+    store_online_session(
+        bob,
+        "alice",
+        session["session_id"],
+        "responder",
+        session["bob_session_key"],
+        session["bob_public_pem"],
+        session["alice_public_pem"],
+    )
+
+    envelope = build_online_session_message_envelope(alice, "bob", "olá sessão online")
+    serialized = json.dumps(envelope, ensure_ascii=False)
+
+    assert envelope["type"] == ONLINE_SESSION_MESSAGE_TYPE
+    assert envelope["version"] == ONLINE_SESSION_MESSAGE_VERSION
+    assert envelope["algorithm"] == ONLINE_SESSION_MESSAGE_ALGORITHM
+    assert envelope["counter"] == 1
+    assert set(envelope["payload"].keys()) == {"nonce", "ciphertext"}
+    assert "olá sessão online" not in serialized
+    assert "action" not in envelope
+    assert "action" not in envelope["payload"]
+    assert is_valid_envelope(envelope)
+
+    aad = build_online_session_aad(
+        envelope["session_id"],
+        envelope["message_id"],
+        envelope["from"],
+        envelope["to"],
+        envelope["timestamp"],
+        envelope["counter"],
+    )
+    plaintext_raw = decrypt_online_session_message(session["bob_session_key"], envelope["payload"], aad)
+    plaintext_payload = json.loads(plaintext_raw)
+    assert plaintext_payload == {"text": "olá sessão online", "action": "message"}
+
+    process_incoming_message(envelope, bob)
+    assert bob.conversations["alice"][0]["text"] == "olá sessão online"
+    assert bob.online_sessions["alice"]["recv_counter"] == 1
+
+    tamper_cases = [
+        {"session_id": "online-session-message-2"},
+        {"message_id": "online-msg-errado"},
+        {"sender": "mallory"},
+        {"recipient": "carla"},
+        {"timestamp": "2026-05-23T12:01:00Z"},
+        {"counter": 2},
+    ]
+    for tamper in tamper_cases:
+        tampered_aad = build_online_session_aad(
+            tamper.get("session_id", envelope["session_id"]),
+            tamper.get("message_id", envelope["message_id"]),
+            tamper.get("sender", envelope["from"]),
+            tamper.get("recipient", envelope["to"]),
+            tamper.get("timestamp", envelope["timestamp"]),
+            tamper.get("counter", envelope["counter"]),
+        )
+        try:
+            decrypt_online_session_message(session["bob_session_key"], envelope["payload"], tampered_aad)
+        except Exception:
+            pass
+        else:
+            raise AssertionError(f"adulteração aceite: {tamper}")
+
+    bad_payload = copy.deepcopy(envelope["payload"])
+    ciphertext = bytearray(base64.b64decode(bad_payload["ciphertext"]))
+    ciphertext[0] ^= 1
+    bad_payload["ciphertext"] = base64.b64encode(ciphertext).decode()
+    try:
+        decrypt_online_session_message(session["bob_session_key"], bad_payload, aad)
+    except Exception:
+        pass
+    else:
+        raise AssertionError("ciphertext adulterado aceite")
+
+    second_envelope = build_online_session_message_envelope(alice, "bob", "segunda mensagem")
+    assert second_envelope["counter"] == 2
+    assert second_envelope["payload"]["nonce"] != envelope["payload"]["nonce"]
+
+    print("OK - mensagem online cifra plaintext e autentica metadados externos")
+
+
+def test_server_forwards_online_session_envelopes_without_offline_storage():
+    print("\n[TESTE] Servidor encaminha envelopes de sessão online sem guardar offline")
+
+    alice = make_user_state("alice")
+    bob = make_user_state("bob")
+    session = derive_test_online_session("online-session-server-1")
+    init = build_session_handshake_envelope(
+        SESSION_INIT_TYPE,
+        session["session_id"],
+        "alice",
+        "bob",
+        session["alice_public_pem"],
+        alice.private_key,
+    )
+
+    assert is_valid_envelope(init)
+    with temporary_messages_file():
+        bob_socket = FakeSocket()
+        with online_users_lock:
+            online_users["bob"] = bob_socket
+        envelope, delivered_online, stored_encrypted = deliver_or_store_message(init, server_users())
+
+        assert delivered_online is True
+        assert stored_encrypted is False
+        assert envelope["type"] == SESSION_INIT_TYPE
+        forwarded = json.loads(bob_socket.sent[-1].decode("utf-8"))
+        assert forwarded["command"] == "deliver_message"
+        assert forwarded["type"] == SESSION_INIT_TYPE
+        assert pop_pending_messages("bob") == []
+
+    response = build_session_handshake_envelope(
+        SESSION_RESPONSE_TYPE,
+        session["session_id"],
+        "bob",
+        "alice",
+        session["bob_public_pem"],
+        bob.private_key,
+    )
+
+    assert is_valid_envelope(response)
+    with temporary_messages_file():
+        alice_socket = FakeSocket()
+        with online_users_lock:
+            online_users["alice"] = alice_socket
+        envelope, delivered_online, stored_encrypted = deliver_or_store_message(response, server_users())
+
+        assert delivered_online is True
+        assert stored_encrypted is False
+        assert envelope["type"] == SESSION_RESPONSE_TYPE
+        forwarded = json.loads(alice_socket.sent[-1].decode("utf-8"))
+        assert forwarded["command"] == "deliver_message"
+        assert forwarded["type"] == SESSION_RESPONSE_TYPE
+        assert pop_pending_messages("alice") == []
+
+    store_online_session(
+        alice,
+        "bob",
+        session["session_id"],
+        "initiator",
+        session["alice_session_key"],
+        session["alice_public_pem"],
+        session["bob_public_pem"],
+    )
+    online_message = build_online_session_message_envelope(alice, "bob", "não guardar como offline")
+
+    assert is_valid_envelope(online_message)
+    with temporary_messages_file():
+        envelope, delivered_online, stored_encrypted = deliver_or_store_message(online_message, server_users())
+
+        assert envelope["type"] == ONLINE_SESSION_MESSAGE_TYPE
+        assert delivered_online is False
+        assert stored_encrypted is False
+        assert pop_pending_messages("bob") == []
+
+    print("OK - session_init é online-only e online_session_message não vira offline")
+
+
+def test_server_stores_offline_prekey_message_without_plaintext_or_private_keys():
+    print("\n[TESTE] Servidor guarda offline_prekey_message sem plaintext nem private keys")
+
+    alice = make_user_state("alice")
+    bob = make_user_state("bob")
+    public_prekey, private_prekey = generate_signed_prekey("bob", bob.private_key)
+    envelope = build_offline_prekey_message_envelope(
+        "alice",
+        "bob",
+        "mensagem offline forward-secret",
+        alice.private_key,
+        public_prekey,
+    )
+
+    with temporary_messages_file():
+        stored_envelope, delivered_online, stored_encrypted = deliver_or_store_message(envelope, server_users())
+        stored_json = json.dumps(storage.load_messages(), ensure_ascii=False)
+
+    assert not delivered_online
+    assert stored_encrypted
+    assert stored_envelope == envelope
+    assert stored_envelope["type"] == OFFLINE_PREKEY_MESSAGE_TYPE
+    assert stored_envelope["prekey_id"] == public_prekey["prekey_id"]
+    assert "mensagem offline forward-secret" not in stored_json
+    assert private_key_to_pem(private_prekey) not in stored_json
+    assert "private_key" not in stored_json
+
+    print("OK - servidor armazena só envelope cifrado com prekey_id público")
+
+
 def test_server_stores_message_when_recipient_offline():
     print("\n[TESTE] Servidor guarda mensagem quando destinatário está offline")
 
@@ -495,6 +1291,199 @@ def test_server_fetch_after_online_delivery_is_empty():
     print("OK - sync pós-entrega online vazio")
 
 
+def test_login_initialization_calls_auto_sync_after_setup():
+    print("\n[TESTE] Login chama auto-sync depois da inicialização")
+
+    state = make_user_state("bob")
+    calls = []
+    globals_ = initialize_logged_in_client.__globals__
+    originals = {
+        "publish_signed_prekeys": globals_["publish_signed_prekeys"],
+        "sync_contacts": globals_["sync_contacts"],
+        "sync_groups": globals_["sync_groups"],
+        "sync_pending_messages": globals_["sync_pending_messages"],
+    }
+
+    try:
+        globals_["publish_signed_prekeys"] = lambda fake_state: calls.append("prekeys")
+        globals_["sync_contacts"] = lambda fake_state: calls.append("contacts")
+        globals_["sync_groups"] = lambda fake_state: calls.append("groups")
+
+        def fake_sync_pending_messages(fake_state, announce=False):
+            calls.append(("pending", announce))
+            return 0
+
+        globals_["sync_pending_messages"] = fake_sync_pending_messages
+        initialize_logged_in_client(state)
+    finally:
+        globals_.update(originals)
+
+    assert calls == ["prekeys", "contacts", "groups", ("pending", True)]
+
+    print("OK - auto-sync corre antes do menu")
+
+
+def test_auto_sync_receives_offline_prekey_message_without_manual_sync():
+    print("\n[TESTE] Auto-sync recebe mensagem offline com signed prekey")
+
+    alice = make_user_state("alice")
+    bob = make_user_state("bob")
+    bob.key_cache["alice"] = alice.public_key
+
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        bob.prekeys_path = os.path.join(tmp_dir, "bob_prekeys.json")
+        public_prekey = generate_and_store_signed_prekeys(bob, 1)[0]
+        envelope = build_offline_prekey_message_envelope(
+            "alice",
+            "bob",
+            "mensagem entregue no login",
+            alice.private_key,
+            public_prekey,
+        )
+
+        globals_ = sync_pending_messages.__globals__
+        original_send_request = globals_["send_request"]
+        try:
+            globals_["send_request"] = lambda sock, response_queue, stop_event, payload: {
+                "status": "ok",
+                "messages": [envelope],
+            }
+            output = io.StringIO()
+            with redirect_stdout(output):
+                assert sync_pending_messages(bob, announce=True) == 1
+        finally:
+            globals_["send_request"] = original_send_request
+
+    assert bob.conversations["alice"][0]["text"] == "mensagem entregue no login"
+    assert "A sincronizar mensagens pendentes..." in output.getvalue()
+    assert "Sincronização concluída: 1 mensagem(ns)." in output.getvalue()
+
+    print("OK - mensagem offline é decifrada sem comando manual")
+
+
+def test_manual_sync_command_still_fetches_pending_messages():
+    print("\n[TESTE] Comando sync manual continua funcional")
+
+    alice = make_user_state("alice")
+    bob = make_user_state("bob")
+    bob.key_cache["alice"] = alice.public_key
+    envelope = build_message_envelope(
+        "alice",
+        "bob",
+        "mensagem por sync manual",
+        alice.private_key,
+        {
+            "identity_public_key": bob.public_key,
+            "e2ee_public_key": bob.x25519_public_key,
+        },
+    )
+
+    globals_ = sync_pending_messages.__globals__
+    original_send_request = globals_["send_request"]
+    try:
+        globals_["send_request"] = lambda sock, response_queue, stop_event, payload: {
+            "status": "ok",
+            "messages": [envelope],
+        }
+        assert cmd_sync(bob) == 1
+    finally:
+        globals_["send_request"] = original_send_request
+
+    assert bob.conversations["alice"][0]["text"] == "mensagem por sync manual"
+
+    print("OK - cmd_sync reutiliza o helper de mensagens pendentes")
+
+
+def test_auto_sync_does_not_duplicate_seen_messages():
+    print("\n[TESTE] Auto-sync não duplica mensagens já vistas")
+
+    alice = make_user_state("alice")
+    bob = make_user_state("bob")
+    bob.key_cache["alice"] = alice.public_key
+    envelope = build_message_envelope(
+        "alice",
+        "bob",
+        "mensagem única",
+        alice.private_key,
+        {
+            "identity_public_key": bob.public_key,
+            "e2ee_public_key": bob.x25519_public_key,
+        },
+    )
+
+    globals_ = sync_pending_messages.__globals__
+    original_send_request = globals_["send_request"]
+    try:
+        globals_["send_request"] = lambda sock, response_queue, stop_event, payload: {
+            "status": "ok",
+            "messages": [envelope],
+        }
+        assert sync_pending_messages(bob, show_summary=False) == 1
+        assert sync_pending_messages(bob, show_summary=False) == 1
+    finally:
+        globals_["send_request"] = original_send_request
+
+    assert len(bob.conversations["alice"]) == 1
+
+    print("OK - deduplicação local impede duplicados no auto-sync")
+
+
+def test_auto_sync_no_pending_messages_is_quietly_successful():
+    print("\n[TESTE] Auto-sync sem mensagens pendentes mantém login normal")
+
+    bob = make_user_state("bob")
+    globals_ = sync_pending_messages.__globals__
+    original_send_request = globals_["send_request"]
+    try:
+        globals_["send_request"] = lambda sock, response_queue, stop_event, payload: {
+            "status": "ok",
+            "messages": [],
+        }
+        output = io.StringIO()
+        with redirect_stdout(output):
+            assert sync_pending_messages(bob, announce=True) == 0
+    finally:
+        globals_["send_request"] = original_send_request
+
+    assert bob.conversations == {}
+    assert "A sincronizar mensagens pendentes..." in output.getvalue()
+    assert "Sem mensagens pendentes." in output.getvalue()
+
+    print("OK - ausência de pendentes não interrompe o fluxo")
+
+
+def test_auto_sync_delivers_offline_group_message():
+    print("\n[TESTE] Auto-sync entrega mensagem de grupo offline")
+
+    sender_priv, sender_pub = generate_rsa_keypair()
+    group = group_model()
+    envelope = signed_group_message_envelope(sender_priv, group["group_key"], message_id="group-auto-sync")
+    bob = ChatState(
+        username="bob",
+        private_key=None,
+        public_key=None,
+        x25519_private_key=None,
+        x25519_public_key=None,
+    )
+    bob.groups["group-equipa"] = group
+    bob.key_cache["alice"] = sender_pub
+
+    globals_ = sync_pending_messages.__globals__
+    original_send_request = globals_["send_request"]
+    try:
+        globals_["send_request"] = lambda sock, response_queue, stop_event, payload: {
+            "status": "ok",
+            "messages": [envelope],
+        }
+        assert sync_pending_messages(bob, show_summary=False) == 1
+    finally:
+        globals_["send_request"] = original_send_request
+
+    assert bob.conversations["group-equipa"][0]["text"] == "olá grupo"
+
+    print("OK - grupo offline também usa o helper de auto-sync")
+
+
 def test_server_stores_offline_when_online_socket_fails():
     print("\n[TESTE] Servidor guarda offline se socket online falhar")
 
@@ -517,8 +1506,8 @@ def test_server_stores_offline_when_online_socket_fails():
     print("OK - falha de socket caiu para offline")
 
 
-def test_server_group_message_delivery_keeps_group_fields():
-    print("\n[TESTE] Servidor mantém campos de grupo na entrega online")
+def test_server_group_message_delivery_keeps_only_minimal_group_metadata():
+    print("\n[TESTE] Servidor mantém só metadados mínimos de grupo")
 
     with temporary_messages_file():
         target_socket = FakeSocket()
@@ -531,14 +1520,20 @@ def test_server_group_message_delivery_keeps_group_fields():
         )
         delivered = decode_sent_json(target_socket)
 
+        assert not is_valid_envelope(server_message("group-invalid-plaintext", group=True))
         assert delivered_online
         assert not stored_encrypted
         assert storage.load_messages() == []
         assert envelope["group_id"] == "group-equipa"
         assert delivered["group_id"] == "group-equipa"
-        assert delivered["group_members"] == ["alice", "bob"]
+        assert "group_name" not in envelope
+        assert "group_members" not in envelope
+        assert "group_action" not in envelope
+        assert "group_name" not in delivered
+        assert "group_members" not in delivered
+        assert "group_action" not in delivered
 
-    print("OK - campos de grupo preservados")
+    print("OK - servidor não propaga metadados sensíveis de grupo")
 
 
 def test_group_key_is_256_bit_aes_key():
@@ -573,6 +1568,7 @@ def test_group_key_share_uses_individual_e2ee_without_plain_key():
     assert decoded["group_key"] == group["group_key"]
     assert decoded["group_key_version"] == group["group_key_version"]
     assert decoded["group_id"] == "group-equipa"
+    assert decoded["action"] == "key_rotation"
 
     print("OK - group_key só aparece depois de decifrar E2EE")
 
@@ -619,14 +1615,135 @@ def test_group_message_is_encrypted_with_group_key():
         message_id,
         timestamp,
     )
-    aad = build_message_aad(message_id, "alice", "bob", timestamp)
+    aad = build_group_aad("group-equipa", "alice", "bob", message_id, timestamp)
     encrypted = encrypt_group_payload(group["group_key"], payload, aad)
 
     assert "segredo do grupo" not in json.dumps(encrypted)
     decoded = decrypt_group_payload(group["group_key"], encrypted["nonce"], encrypted["ciphertext"], aad)
     assert decoded == payload
+    assert decoded["text"] == "segredo do grupo"
+    assert decoded["action"] == "message"
 
     print("OK - grupo cifra e decifra com AES-GCM")
+
+
+def test_group_message_envelope_hides_sensitive_metadata():
+    print("\n[TESTE] Envelope exterior de grupo não expõe metadados sensíveis")
+
+    sender_priv, _ = generate_rsa_keypair()
+    group = group_model()
+    envelope = signed_group_message_envelope(
+        sender_priv,
+        group["group_key"],
+        message_id="group-hidden-metadata",
+        text="texto secreto do grupo",
+    )
+    serialized = json.dumps(envelope, ensure_ascii=False)
+
+    for field in ["type", "group_id", "from", "to", "message_id", "timestamp", "payload", "signature"]:
+        assert field in envelope
+    assert set(envelope["payload"].keys()) == {"nonce", "ciphertext"}
+    for forbidden_field in ["text", "group_name", "group_members", "members", "action", "group_key_version", "nonce", "ciphertext"]:
+        assert forbidden_field not in envelope
+    assert '"text"' not in serialized
+    assert '"group_name"' not in serialized
+    assert '"members"' not in serialized
+    assert '"action"' not in serialized
+    assert "texto secreto do grupo" not in serialized
+    assert "Equipa" not in serialized
+
+    aad = build_group_aad(
+        envelope["group_id"],
+        envelope["from"],
+        envelope["to"],
+        envelope["message_id"],
+        envelope["timestamp"],
+    )
+    decoded = decrypt_group_payload(group["group_key"], envelope["payload"]["nonce"], envelope["payload"]["ciphertext"], aad)
+
+    assert decoded["text"] == "texto secreto do grupo"
+    assert decoded["action"] == "message"
+    assert decoded["group_name"] == "Equipa"
+    assert decoded["members"] == ["alice", "bob"]
+
+    print("OK - metadados sensíveis só aparecem após decifragem")
+
+
+def test_group_event_envelope_hides_action_and_members():
+    print("\n[TESTE] Evento de grupo cifra action e members")
+
+    sender_priv, _ = generate_rsa_keypair()
+    recipient_priv, recipient_pub = generate_rsa_keypair()
+    group_info = {
+        "id": "group-equipa",
+        "name": "Equipa",
+        "members": ["alice", "bob", "carla"],
+    }
+    plaintext = group_control_plaintext(
+        group_info,
+        "carla foi removida",
+        "delete",
+    )
+    envelope = build_message_envelope("alice", "bob", plaintext, sender_priv, recipient_pub, group=group_info)
+    serialized = json.dumps(envelope, ensure_ascii=False)
+
+    assert envelope["group_id"] == "group-equipa"
+    assert "group_name" not in envelope
+    assert "group_members" not in envelope
+    assert "group_action" not in envelope
+    assert '"members"' not in serialized
+    assert '"action"' not in serialized
+    assert "carla foi removida" not in serialized
+    assert "Equipa" not in serialized
+
+    aad = build_message_aad(envelope["message_id"], envelope["from"], envelope["to"], envelope["timestamp"])
+    decoded = json.loads(decrypt_from_sender(envelope["payload"], recipient_priv, aad=aad))
+
+    assert decoded["type"] == "group_control"
+    assert decoded["group_name"] == "Equipa"
+    assert decoded["members"] == ["alice", "bob", "carla"]
+    assert decoded["action"] == "delete"
+    assert decoded["text"] == "carla foi removida"
+
+    print("OK - evento de gestão não expõe action/members no exterior")
+
+
+def test_group_message_aad_rejects_outer_metadata_tampering():
+    print("\n[TESTE] AAD de grupo rejeita metadados exteriores adulterados")
+
+    sender_priv, _ = generate_rsa_keypair()
+    group = group_model()
+    envelope = signed_group_message_envelope(
+        sender_priv,
+        group["group_key"],
+        message_id="group-aad-original",
+        text="texto autenticado",
+    )
+
+    for field, value in [
+        ("group_id", "group-outro"),
+        ("from", "mallory"),
+        ("to", "carla"),
+        ("message_id", "group-aad-tampered"),
+        ("timestamp", "2026-05-23T00:00:00Z"),
+    ]:
+        tampered = copy.deepcopy(envelope)
+        tampered[field] = value
+        aad = build_group_aad(
+            tampered["group_id"],
+            tampered["from"],
+            tampered["to"],
+            tampered["message_id"],
+            tampered["timestamp"],
+        )
+        try:
+            decrypt_group_payload(group["group_key"], envelope["payload"]["nonce"], envelope["payload"]["ciphertext"], aad)
+        except Exception:
+            pass
+        else:
+            raise AssertionError(f"metadado exterior adulterado aceite: {field}")
+
+    print("OK - group_id/from/to/message_id/timestamp autenticados no AAD")
 
 
 def test_member_without_group_key_cannot_decrypt_group_message():
@@ -644,7 +1761,7 @@ def test_member_without_group_key_cannot_decrypt_group_message():
         message_id,
         timestamp,
     )
-    aad = build_message_aad(message_id, "alice", "bob", timestamp)
+    aad = build_group_aad("group-equipa", "alice", "bob", message_id, timestamp)
     encrypted = encrypt_group_payload(group["group_key"], payload, aad)
 
     try:
@@ -677,7 +1794,13 @@ def test_server_cannot_see_group_text_or_key():
         assert not delivered_online
         assert stored_encrypted
         assert stored_envelope == envelope
+        assert set(stored_envelope["payload"].keys()) == {"nonce", "ciphertext"}
         assert "texto invisível ao servidor" not in stored_json
+        assert "Equipa" not in stored_json
+        assert '"group_name"' not in stored_json
+        assert '"members"' not in stored_json
+        assert '"action"' not in stored_json
+        assert '"group_key_version"' not in stored_json
         assert group["group_key"] not in stored_json
         assert '"group_key":' not in stored_json
 
@@ -785,6 +1908,26 @@ def test_export_bundle_creates_public_json():
     print("OK - bundle contém só material público")
 
 
+def test_export_bundle_prints_identity_fingerprint():
+    print("\n[TESTE] export_bundle mostra fingerprint da identity_key")
+
+    alice = make_user_state("alice")
+    expected_fingerprint = identity_key_fingerprint(alice.public_key)
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        bundle_path = os.path.join(tmp_dir, "alice-bundle.json")
+        output = io.StringIO()
+        with redirect_stdout(output):
+            assert cmd_export_bundle(alice, bundle_path)
+
+        with open(bundle_path, "r", encoding="utf-8") as f:
+            bundle = json.load(f)
+
+    assert bundle["fingerprint"] == expected_fingerprint
+    assert expected_fingerprint in output.getvalue()
+
+    print("OK - fingerprint exportada e apresentada")
+
+
 def test_import_bundle_imports_public_keys():
     print("\n[TESTE] import_bundle importa chaves públicas")
 
@@ -800,6 +1943,99 @@ def test_import_bundle_imports_public_keys():
     assert public_key_to_pem(bob.e2ee_key_cache["alice"]) == public_key_to_pem(alice.x25519_public_key)
 
     print("OK - bundle importado para cache local")
+
+
+def test_import_bundle_persists_public_bundle_locally():
+    print("\n[TESTE] import_bundle persiste bundle localmente")
+
+    alice = make_user_state("alice")
+    bob = make_user_state("bob")
+    bundle = build_public_bundle(alice)
+
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        bob.imported_bundles_path = os.path.join(tmp_dir, "bob_bundles.json")
+        bundle_path = os.path.join(tmp_dir, "alice-bundle.json")
+        with open(bundle_path, "w", encoding="utf-8") as f:
+            json.dump(bundle, f)
+
+        output = io.StringIO()
+        with redirect_stdout(output):
+            assert cmd_import_bundle(bob, bundle_path)
+
+        with open(bob.imported_bundles_path, "r", encoding="utf-8") as f:
+            persisted = json.load(f)
+
+    assert "alice" in persisted
+    assert persisted["alice"]["username"] == "alice"
+    assert persisted["alice"]["fingerprint"] == identity_key_fingerprint(alice.public_key)
+    assert persisted["alice"]["fingerprint"] in output.getvalue()
+    assert "PRIVATE KEY" not in json.dumps(persisted)
+    assert "group_key" not in json.dumps(persisted)
+
+    print("OK - bundle persistido com fingerprint")
+
+
+def test_imported_bundles_reload_after_restart():
+    print("\n[TESTE] bundles persistidos são recarregados após reinício")
+
+    alice = make_user_state("alice")
+    bob = make_user_state("bob")
+
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        bundles_path = os.path.join(tmp_dir, "bob_bundles.json")
+        bob.imported_bundles_path = bundles_path
+        bundle_path = os.path.join(tmp_dir, "alice-bundle.json")
+        with open(bundle_path, "w", encoding="utf-8") as f:
+            json.dump(build_public_bundle(alice), f)
+
+        assert cmd_import_bundle(bob, bundle_path)
+
+        restarted_bob = make_user_state("bob")
+        restarted_bob.imported_bundles_path = bundles_path
+        restarted_bob.key_cache = {"bob": restarted_bob.public_key}
+        restarted_bob.e2ee_key_cache = {"bob": restarted_bob.x25519_public_key}
+        restarted_bob.contacts = set()
+
+        assert load_imported_bundles(restarted_bob) == 1
+
+    assert "alice" in restarted_bob.contacts
+    assert public_key_to_pem(restarted_bob.key_cache["alice"]) == public_key_to_pem(alice.public_key)
+    assert public_key_to_pem(restarted_bob.e2ee_key_cache["alice"]) == public_key_to_pem(alice.x25519_public_key)
+
+    print("OK - bundle recarregado para as caches locais")
+
+
+def test_export_msg_uses_bundle_loaded_from_persistence():
+    print("\n[TESTE] export_msg usa bundle carregado da persistência local")
+
+    alice = make_user_state("alice")
+    bob = make_user_state("bob")
+
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        bundles_path = os.path.join(tmp_dir, "alice_bundles.json")
+        alice.imported_bundles_path = bundles_path
+        bundle_path = os.path.join(tmp_dir, "bob-bundle.json")
+        with open(bundle_path, "w", encoding="utf-8") as f:
+            json.dump(build_public_bundle(bob), f)
+
+        assert cmd_import_bundle(alice, bundle_path)
+
+        restarted_alice = make_user_state("alice")
+        restarted_alice.imported_bundles_path = bundles_path
+        restarted_alice.key_cache = {"alice": restarted_alice.public_key}
+        restarted_alice.e2ee_key_cache = {"alice": restarted_alice.x25519_public_key}
+        assert load_imported_bundles(restarted_alice) == 1
+
+        msg_path = os.path.join(tmp_dir, "msg.json")
+        assert cmd_export_msg(restarted_alice, "bob", "mensagem persistida", msg_path)
+
+        with open(msg_path, "r", encoding="utf-8") as f:
+            exported = json.load(f)
+
+    assert exported["envelope"]["to"] == "bob"
+    assert "mensagem persistida" not in json.dumps(exported, ensure_ascii=False)
+
+    print("OK - mensagem cifrada para bundle recarregado")
 
 
 def test_import_bundle_rejects_invalid_json():
@@ -830,6 +2066,35 @@ def test_import_bundle_rejects_missing_fields():
         assert "alice" not in bob.key_cache
 
     print("OK - bundle incompleto rejeitado")
+
+
+def test_import_bundle_failure_does_not_corrupt_local_store():
+    print("\n[TESTE] import_bundle inválido não corrompe persistência local")
+
+    alice = make_user_state("alice")
+    bob = make_user_state("bob")
+
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        bob.imported_bundles_path = os.path.join(tmp_dir, "bob_bundles.json")
+        good_path = os.path.join(tmp_dir, "alice-bundle.json")
+        with open(good_path, "w", encoding="utf-8") as f:
+            json.dump(build_public_bundle(alice), f)
+        assert cmd_import_bundle(bob, good_path)
+
+        with open(bob.imported_bundles_path, "r", encoding="utf-8") as f:
+            before = json.load(f)
+
+        bad_path = os.path.join(tmp_dir, "bad-bundle.json")
+        with open(bad_path, "w", encoding="utf-8") as f:
+            f.write("{invalid")
+        assert not cmd_import_bundle(bob, bad_path)
+
+        with open(bob.imported_bundles_path, "r", encoding="utf-8") as f:
+            after = json.load(f)
+
+    assert after == before
+
+    print("OK - persistência local preservada após erro")
 
 
 def test_export_import_message_file_roundtrip():
@@ -1045,6 +2310,148 @@ def test_remove_member_rotates_and_shares_only_with_remaining_members():
     print("OK - membro removido não recebeu nova group_key")
 
 
+def test_leave_group_uses_single_deterministic_rotation_leader():
+    print("\n[TESTE] leave_group escolhe um único rotation leader")
+
+    old_key = generate_group_key()
+    group = {
+        "name": "Equipa",
+        "members": ["alice", "bob", "carla"],
+        "group_key": old_key,
+        "group_key_version": 1,
+    }
+    bob = make_user_state("bob")
+    carla = make_user_state("carla")
+    bob.groups["group-equipa"] = copy.deepcopy(group)
+    carla.groups["group-equipa"] = copy.deepcopy(group)
+    msg = {"group_id": "group-equipa", "from": "alice"}
+    share_calls = []
+    share_recipients = []
+    globals_ = handle_group_leave_message.__globals__
+    originals = {
+        "update_groups": globals_["update_groups"],
+        "send_group_key_shares": globals_["send_group_key_shares"],
+    }
+
+    def fake_send_group_key_shares(fake_state, group_id):
+        rotated_group = fake_state.groups[group_id]
+        share_calls.append((fake_state.username, rotated_group["group_key"], rotated_group["group_key_version"]))
+        share_recipients.extend(sorted(member for member in rotated_group["members"] if member != fake_state.username))
+        return []
+
+    try:
+        globals_["update_groups"] = lambda fake_state: True
+        globals_["send_group_key_shares"] = fake_send_group_key_shares
+        leave_payload = {"group_id": "group-equipa", "text": "alice saiu"}
+        handle_group_leave_message(bob, msg, leave_payload)
+        handle_group_leave_message(carla, msg, leave_payload)
+    finally:
+        globals_.update(originals)
+
+    assert get_group_rotation_leader(["carla", "bob"]) == "bob"
+    assert share_calls == [("bob", bob.groups["group-equipa"]["group_key"], 2)]
+    assert share_recipients == ["carla"]
+    assert "alice" not in share_recipients
+    assert bob.groups["group-equipa"]["members"] == ["bob", "carla"]
+    assert bob.groups["group-equipa"]["group_key"] != old_key
+    assert bob.groups["group-equipa"]["group_key_version"] == 2
+    assert carla.groups["group-equipa"]["members"] == ["bob", "carla"]
+    assert "group_key" not in carla.groups["group-equipa"]
+    assert carla.groups["group-equipa"]["group_key_version"] == 2
+    assert carla.groups["group-equipa"]["group_key_rotation_pending"] is True
+    assert carla.groups["group-equipa"]["group_key_rotation_leader"] == "bob"
+
+    print("OK - só o leader roda e distribui a nova group_key")
+
+
+def test_leave_group_remaining_members_use_new_key_and_leaver_cannot_decrypt():
+    print("\n[TESTE] Mensagens futuras após leave usam nova group_key")
+
+    old_key = generate_group_key()
+    original_group = {
+        "name": "Equipa",
+        "members": ["alice", "bob", "carla"],
+        "group_key": old_key,
+        "group_key_version": 1,
+    }
+    bob = make_user_state("bob")
+    carla = make_user_state("carla")
+    bob.groups["group-equipa"] = copy.deepcopy(original_group)
+    carla.groups["group-equipa"] = copy.deepcopy(original_group)
+    msg = {"group_id": "group-equipa", "from": "alice"}
+    globals_ = handle_group_leave_message.__globals__
+    originals = {
+        "update_groups": globals_["update_groups"],
+        "send_group_key_shares": globals_["send_group_key_shares"],
+    }
+
+    try:
+        globals_["update_groups"] = lambda fake_state: True
+        globals_["send_group_key_shares"] = lambda fake_state, group_id: []
+        leave_payload = {"group_id": "group-equipa", "text": "alice saiu"}
+        handle_group_leave_message(bob, msg, leave_payload)
+        handle_group_leave_message(carla, msg, leave_payload)
+    finally:
+        globals_.update(originals)
+
+    share_payload = json.loads(group_key_share_plaintext("group-equipa", bob.groups["group-equipa"]))
+    handle_group_key_share_message(carla, {"from": "bob"}, share_payload, "share-bob-2")
+
+    assert carla.groups["group-equipa"]["group_key"] == bob.groups["group-equipa"]["group_key"]
+    assert carla.groups["group-equipa"]["group_key_version"] == 2
+    assert "group_key_rotation_pending" not in carla.groups["group-equipa"]
+
+    message_id = "future-after-leave"
+    timestamp = "2026-05-23T12:30:00Z"
+    payload = build_group_message_payload("bob", "group-equipa", bob.groups["group-equipa"], "segredo futuro", message_id, timestamp)
+    aad = build_group_aad("group-equipa", "bob", "carla", message_id, timestamp)
+    encrypted = encrypt_group_payload(bob.groups["group-equipa"]["group_key"], payload, aad)
+    decoded = decrypt_group_payload(carla.groups["group-equipa"]["group_key"], encrypted["nonce"], encrypted["ciphertext"], aad)
+
+    assert decoded["text"] == "segredo futuro"
+    assert decoded["group_key_version"] == 2
+    try:
+        decrypt_group_payload(old_key, encrypted["nonce"], encrypted["ciphertext"], aad)
+    except Exception:
+        pass
+    else:
+        raise AssertionError("membro que saiu decifrou mensagem futura")
+
+    print("OK - restantes decifram com chave nova e quem saiu não")
+
+
+def test_member_waiting_for_rotation_cannot_send_with_old_group_key():
+    print("\n[TESTE] Membro sem nova group_key não envia com chave antiga")
+
+    carla = make_user_state("carla")
+    carla.groups["group-equipa"] = {
+        "name": "Equipa",
+        "members": ["alice", "bob", "carla"],
+        "group_key": generate_group_key(),
+        "group_key_version": 1,
+    }
+    msg = {"group_id": "group-equipa", "from": "alice"}
+    globals_ = handle_group_leave_message.__globals__
+    original_update_groups = globals_["update_groups"]
+
+    try:
+        globals_["update_groups"] = lambda fake_state: True
+        handle_group_leave_message(carla, msg, {"group_id": "group-equipa", "text": "alice saiu"})
+    finally:
+        globals_["update_groups"] = original_update_groups
+
+    output = io.StringIO()
+    with redirect_stdout(output):
+        cmd_send_group(carla, "group-equipa", "não deve sair")
+
+    assert "group_key_rotation_pending" in carla.groups["group-equipa"]
+    assert "group_key" not in carla.groups["group-equipa"]
+    assert "A aguardar rotação da group_key" in output.getvalue()
+    assert carla.conversations == {}
+
+    print("OK - envio bloqueado até receber a nova key share")
+
+
 def test_group_messages_after_rotation_use_new_key_version():
     print("\n[TESTE] Mensagens após remoção usam nova versão da group_key")
 
@@ -1059,10 +2466,9 @@ def test_group_messages_after_rotation_use_new_key_version():
     message_id = "rotated-group-msg"
     timestamp = "2026-05-23T12:00:00Z"
     payload = build_group_message_payload("alice", "group-equipa", group, "segredo futuro", message_id, timestamp)
-    aad = build_message_aad(message_id, "alice", "carla", timestamp)
+    aad = build_group_aad("group-equipa", "alice", "carla", message_id, timestamp)
     encrypted = encrypt_group_payload(group["group_key"], payload, aad)
 
-    assert encrypted["group_key_version"] == 2
     decoded = decrypt_group_payload(group["group_key"], encrypted["nonce"], encrypted["ciphertext"], aad)
     assert decoded["text"] == "segredo futuro"
     assert decoded["group_key_version"] == 2
@@ -1381,15 +2787,39 @@ def run_all():
     test_e2ee_v1_compatibility()
     test_e2ee_public_key_binding_signature()
     test_e2ee_public_key_overwrite_rejected()
+    test_signed_prekey_generation_and_signature_validation()
+    test_private_prekey_stays_in_local_store_only()
+    test_server_stores_only_public_signed_prekeys_and_rejects_bad_ones()
+    test_server_returns_signed_prekey_once()
+    test_offline_prekey_message_roundtrip_and_consumes_private_prekey()
+    test_offline_prekey_message_fails_without_private_prekey()
+    test_offline_prekey_message_rejects_aad_and_ciphertext_tampering()
+    test_online_session_handshake_signature_validation()
+    test_online_session_key_derivation_matches_and_is_fresh()
+    test_online_session_handshake_processing_creates_memory_only_sessions()
+    test_online_session_normal_handshake_accepts_larger_username_initiator_without_conflict()
+    test_simultaneous_online_session_handshake_uses_deterministic_winner()
+    test_online_session_message_roundtrip_and_tamper_detection()
+    test_server_forwards_online_session_envelopes_without_offline_storage()
+    test_server_stores_offline_prekey_message_without_plaintext_or_private_keys()
     test_server_stores_message_when_recipient_offline()
     test_server_delivers_online_without_storing_pending()
     test_server_fetch_after_online_delivery_is_empty()
+    test_login_initialization_calls_auto_sync_after_setup()
+    test_auto_sync_receives_offline_prekey_message_without_manual_sync()
+    test_manual_sync_command_still_fetches_pending_messages()
+    test_auto_sync_does_not_duplicate_seen_messages()
+    test_auto_sync_no_pending_messages_is_quietly_successful()
+    test_auto_sync_delivers_offline_group_message()
     test_server_stores_offline_when_online_socket_fails()
-    test_server_group_message_delivery_keeps_group_fields()
+    test_server_group_message_delivery_keeps_only_minimal_group_metadata()
     test_group_key_is_256_bit_aes_key()
     test_group_key_share_uses_individual_e2ee_without_plain_key()
     test_receiving_group_key_share_updates_local_group()
     test_group_message_is_encrypted_with_group_key()
+    test_group_message_envelope_hides_sensitive_metadata()
+    test_group_event_envelope_hides_action_and_members()
+    test_group_message_aad_rejects_outer_metadata_tampering()
     test_member_without_group_key_cannot_decrypt_group_message()
     test_server_cannot_see_group_text_or_key()
     test_private_messages_still_use_existing_e2ee_envelope()
@@ -1397,9 +2827,14 @@ def run_all():
     test_message_aad_rejects_metadata_tampering()
     test_message_aad_rejects_ciphertext_tampering()
     test_export_bundle_creates_public_json()
+    test_export_bundle_prints_identity_fingerprint()
     test_import_bundle_imports_public_keys()
+    test_import_bundle_persists_public_bundle_locally()
+    test_imported_bundles_reload_after_restart()
+    test_export_msg_uses_bundle_loaded_from_persistence()
     test_import_bundle_rejects_invalid_json()
     test_import_bundle_rejects_missing_fields()
+    test_import_bundle_failure_does_not_corrupt_local_store()
     test_export_import_message_file_roundtrip()
     test_import_msg_rejects_wrong_recipient()
     test_import_msg_rejects_ciphertext_tampering()
@@ -1408,6 +2843,9 @@ def run_all():
     test_offline_sync_delivers_group_message_envelope()
     test_group_key_rotation_changes_key_and_version()
     test_remove_member_rotates_and_shares_only_with_remaining_members()
+    test_leave_group_uses_single_deterministic_rotation_leader()
+    test_leave_group_remaining_members_use_new_key_and_leaver_cannot_decrypt()
+    test_member_waiting_for_rotation_cannot_send_with_old_group_key()
     test_group_messages_after_rotation_use_new_key_version()
     test_remove_missing_group_member_does_not_corrupt_group()
     test_concurrent_user_updates_keep_valid_json()

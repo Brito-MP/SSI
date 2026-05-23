@@ -15,12 +15,24 @@ from common.secure_channel import (
 from crypto_utils import (
     E2EE_MESSAGE_VERSION,
     GROUP_MESSAGE_TYPE,
+    OFFLINE_PREKEY_MESSAGE_ALGORITHM,
+    OFFLINE_PREKEY_MESSAGE_TYPE,
+    OFFLINE_PREKEY_MESSAGE_VERSION,
+    ONLINE_SESSION_MESSAGE_ALGORITHM,
+    ONLINE_SESSION_MESSAGE_TYPE,
+    ONLINE_SESSION_MESSAGE_VERSION,
+    SESSION_INIT_TYPE,
+    SESSION_RESPONSE_TYPE,
+    SIGNED_PREKEY_ALGORITHM,
+    SIGNED_PREKEY_TYPE,
+    SIGNED_PREKEY_VERSION,
     e2ee_public_key_binding_bytes,
     public_key_from_pem,
     public_key_to_pem,
     verify_protected_contacts,
     verify_protected_groups,
     verify_signature,
+    verify_signed_prekey,
     x25519_public_key_from_pem,
 )
 from protocol import send_json, recv_json
@@ -46,6 +58,8 @@ online_users_lock = threading.Lock()
 
 E2EE_PUBLIC_KEY_FIELD = "e2ee_public_key"
 E2EE_PUBLIC_KEY_SIGNATURE_FIELD = "e2ee_public_key_signature"
+SIGNED_PREKEYS_FIELD = "signed_prekeys"
+MAX_SIGNED_PREKEYS_PER_USER = 50
 REQUIRED_V1_PAYLOAD_FIELDS = {"nonce", "ciphertext", "encrypted_key"}
 REQUIRED_V2_PAYLOAD_FIELDS = {"version", "nonce", "ciphertext", "sender_ephemeral_key"}
 REQUIRED_ENVELOPE_FIELDS = {
@@ -56,7 +70,8 @@ REQUIRED_ENVELOPE_FIELDS = {
     "payload",
     "signature",
 }
-OPTIONAL_ENVELOPE_FIELDS = {"group_id", "group_name", "group_members", "group_action"}
+OPTIONAL_ENVELOPE_FIELDS = {"group_id"}
+FORBIDDEN_PLAINTEXT_GROUP_FIELDS = {"group_name", "group_members", "group_action", "members", "action", "text"}
 REQUIRED_GROUP_MESSAGE_FIELDS = {
     "type",
     "group_id",
@@ -64,10 +79,45 @@ REQUIRED_GROUP_MESSAGE_FIELDS = {
     "timestamp",
     "from",
     "to",
-    "nonce",
-    "ciphertext",
+    "payload",
     "signature",
 }
+REQUIRED_OFFLINE_PREKEY_MESSAGE_FIELDS = {
+    "type",
+    "version",
+    "algorithm",
+    "message_id",
+    "timestamp",
+    "from",
+    "to",
+    "prekey_id",
+    "ephemeral_public_key",
+    "payload",
+    "signature",
+}
+REQUIRED_SESSION_HANDSHAKE_FIELDS = {
+    "type",
+    "session_id",
+    "timestamp",
+    "from",
+    "to",
+    "ephemeral_public_key",
+    "signature",
+}
+REQUIRED_ONLINE_SESSION_MESSAGE_FIELDS = {
+    "type",
+    "version",
+    "algorithm",
+    "session_id",
+    "message_id",
+    "timestamp",
+    "from",
+    "to",
+    "counter",
+    "payload",
+    "signature",
+}
+ONLINE_ONLY_MESSAGE_TYPES = {SESSION_INIT_TYPE, SESSION_RESPONSE_TYPE, ONLINE_SESSION_MESSAGE_TYPE}
 
 
 def is_valid_payload(payload: dict) -> bool:
@@ -86,13 +136,90 @@ def is_valid_payload(payload: dict) -> bool:
     )
 
 
+def is_valid_group_payload(payload: dict) -> bool:
+    if not isinstance(payload, dict):
+        return False
+    return all(isinstance(payload.get(field), str) and payload.get(field) for field in ["nonce", "ciphertext"])
+
+
+def is_valid_offline_prekey_payload(payload: dict) -> bool:
+    if not isinstance(payload, dict):
+        return False
+    return all(isinstance(payload.get(field), str) and payload.get(field) for field in ["nonce", "ciphertext"])
+
+
+def is_valid_session_handshake(msg: dict) -> bool:
+    if not REQUIRED_SESSION_HANDSHAKE_FIELDS.issubset(msg.keys()):
+        return False
+    if msg.get("type") not in {SESSION_INIT_TYPE, SESSION_RESPONSE_TYPE}:
+        return False
+    if not all(
+        isinstance(msg[field], str) and msg[field]
+        for field in ["type", "session_id", "timestamp", "from", "to", "ephemeral_public_key", "signature"]
+    ):
+        return False
+    try:
+        x25519_public_key_from_pem(msg["ephemeral_public_key"])
+    except Exception:
+        return False
+    return True
+
+
+def is_valid_online_session_message(msg: dict) -> bool:
+    if not REQUIRED_ONLINE_SESSION_MESSAGE_FIELDS.issubset(msg.keys()):
+        return False
+    if msg.get("version") != ONLINE_SESSION_MESSAGE_VERSION:
+        return False
+    if msg.get("algorithm") != ONLINE_SESSION_MESSAGE_ALGORITHM:
+        return False
+    if not isinstance(msg.get("counter"), int) or msg["counter"] < 1:
+        return False
+    if not all(
+        isinstance(msg[field], str) and msg[field]
+        for field in ["type", "algorithm", "session_id", "message_id", "timestamp", "from", "to", "signature"]
+    ):
+        return False
+    return is_valid_group_payload(msg.get("payload"))
+
+
 # Verifica se a estrutura da mensagem recebida tem o formato esperado.
 def is_valid_envelope(msg: dict) -> bool:
-    if msg.get("type") == GROUP_MESSAGE_TYPE:
-        return REQUIRED_GROUP_MESSAGE_FIELDS.issubset(msg.keys()) and all(
+    if any(field in msg for field in FORBIDDEN_PLAINTEXT_GROUP_FIELDS):
+        return False
+
+    if msg.get("type") in {SESSION_INIT_TYPE, SESSION_RESPONSE_TYPE}:
+        return is_valid_session_handshake(msg)
+
+    if msg.get("type") == ONLINE_SESSION_MESSAGE_TYPE:
+        return is_valid_online_session_message(msg)
+
+    if msg.get("type") == OFFLINE_PREKEY_MESSAGE_TYPE:
+        if not REQUIRED_OFFLINE_PREKEY_MESSAGE_FIELDS.issubset(msg.keys()):
+            return False
+        if msg.get("version") != OFFLINE_PREKEY_MESSAGE_VERSION:
+            return False
+        if msg.get("algorithm") != OFFLINE_PREKEY_MESSAGE_ALGORITHM:
+            return False
+        if not all(
             isinstance(msg[field], str) and msg[field]
-            for field in REQUIRED_GROUP_MESSAGE_FIELDS
-        )
+            for field in ["type", "algorithm", "message_id", "timestamp", "from", "to", "prekey_id", "ephemeral_public_key", "signature"]
+        ):
+            return False
+        try:
+            x25519_public_key_from_pem(msg["ephemeral_public_key"])
+        except Exception:
+            return False
+        return is_valid_offline_prekey_payload(msg.get("payload"))
+
+    if msg.get("type") == GROUP_MESSAGE_TYPE:
+        if not REQUIRED_GROUP_MESSAGE_FIELDS.issubset(msg.keys()):
+            return False
+        if not all(
+            isinstance(msg[field], str) and msg[field]
+            for field in ["type", "group_id", "message_id", "timestamp", "from", "to", "signature"]
+        ):
+            return False
+        return is_valid_group_payload(msg.get("payload"))
 
     if not REQUIRED_ENVELOPE_FIELDS.issubset(msg.keys()):
         return False
@@ -109,6 +236,54 @@ def is_valid_envelope(msg: dict) -> bool:
 # Guarda uma mensagem offline para o destinatário.
 # O conteúdo já vem cifrado do cliente; o servidor só persiste e encaminha.
 def build_envelope(msg: dict):
+    if msg.get("type") in {SESSION_INIT_TYPE, SESSION_RESPONSE_TYPE}:
+        return {
+            "type": msg["type"],
+            "session_id": msg["session_id"],
+            "message_id": msg.get("message_id", msg["session_id"]),
+            "timestamp": msg["timestamp"],
+            "from": msg["from"],
+            "to": msg["to"],
+            "ephemeral_public_key": msg["ephemeral_public_key"],
+            "signature": msg["signature"],
+        }
+
+    if msg.get("type") == ONLINE_SESSION_MESSAGE_TYPE:
+        return {
+            "type": ONLINE_SESSION_MESSAGE_TYPE,
+            "version": msg["version"],
+            "algorithm": msg["algorithm"],
+            "session_id": msg["session_id"],
+            "message_id": msg["message_id"],
+            "timestamp": msg["timestamp"],
+            "from": msg["from"],
+            "to": msg["to"],
+            "counter": msg["counter"],
+            "payload": {
+                "nonce": msg["payload"]["nonce"],
+                "ciphertext": msg["payload"]["ciphertext"],
+            },
+            "signature": msg["signature"],
+        }
+
+    if msg.get("type") == OFFLINE_PREKEY_MESSAGE_TYPE:
+        return {
+            "type": OFFLINE_PREKEY_MESSAGE_TYPE,
+            "version": msg["version"],
+            "algorithm": msg["algorithm"],
+            "message_id": msg["message_id"],
+            "timestamp": msg["timestamp"],
+            "from": msg["from"],
+            "to": msg["to"],
+            "prekey_id": msg["prekey_id"],
+            "ephemeral_public_key": msg["ephemeral_public_key"],
+            "payload": {
+                "nonce": msg["payload"]["nonce"],
+                "ciphertext": msg["payload"]["ciphertext"],
+            },
+            "signature": msg["signature"],
+        }
+
     if msg.get("type") == GROUP_MESSAGE_TYPE:
         envelope = {
             "type": GROUP_MESSAGE_TYPE,
@@ -117,12 +292,12 @@ def build_envelope(msg: dict):
             "timestamp": msg["timestamp"],
             "from": msg["from"],
             "to": msg["to"],
-            "nonce": msg["nonce"],
-            "ciphertext": msg["ciphertext"],
+            "payload": {
+                "nonce": msg["payload"]["nonce"],
+                "ciphertext": msg["payload"]["ciphertext"],
+            },
             "signature": msg["signature"],
         }
-        if "group_key_version" in msg:
-            envelope["group_key_version"] = msg["group_key_version"]
         return envelope
 
     envelope = {
@@ -175,6 +350,9 @@ def deliver_or_store_message(msg: dict, users: dict):
         else:
             return envelope, True, False
 
+    if msg.get("type") in ONLINE_ONLY_MESSAGE_TYPES:
+        return envelope, False, False
+
     store_encrypted_message(msg, envelope)
     return envelope, False, True
 
@@ -213,6 +391,77 @@ def registered_user(users: dict, username: str):
     if not isinstance(user_data, dict) or "public_key" not in user_data or "certificate" not in user_data:
         return None
     return user_data
+
+
+def clean_public_signed_prekey(prekey: dict):
+    if not isinstance(prekey, dict):
+        raise ValueError("signed prekey inválida")
+    clean = {
+        "type": prekey.get("type", SIGNED_PREKEY_TYPE),
+        "version": prekey.get("version", SIGNED_PREKEY_VERSION),
+        "prekey_id": prekey.get("prekey_id"),
+        "algorithm": prekey.get("algorithm"),
+        "public_key": prekey.get("public_key"),
+        "signature": prekey.get("signature"),
+        "created_at": prekey.get("created_at"),
+    }
+    required = ["prekey_id", "algorithm", "public_key", "signature", "created_at"]
+    if not all(isinstance(clean.get(field), str) and clean.get(field) for field in required):
+        raise ValueError("campos obrigatórios da signed prekey em falta")
+    if clean["type"] != SIGNED_PREKEY_TYPE or clean["version"] != SIGNED_PREKEY_VERSION:
+        raise ValueError("tipo ou versão de signed prekey inválidos")
+    if clean["algorithm"] != SIGNED_PREKEY_ALGORITHM:
+        raise ValueError("algoritmo de signed prekey inválido")
+    x25519_public_key_from_pem(clean["public_key"])
+    return clean
+
+
+def publish_signed_prekeys_for_user(user_data: dict, username: str, prekeys):
+    if not isinstance(prekeys, list):
+        raise ValueError("lista de signed prekeys inválida")
+
+    identity_public_key = public_key_from_pem(user_data["public_key"])
+    stored = user_data.get(SIGNED_PREKEYS_FIELD)
+    if not isinstance(stored, dict):
+        stored = {}
+
+    accepted = []
+    for prekey in prekeys:
+        clean = clean_public_signed_prekey(prekey)
+        prekey_id = clean["prekey_id"]
+        if prekey_id in stored:
+            continue
+        if not verify_signed_prekey(username, identity_public_key, clean):
+            raise ValueError("assinatura da signed prekey inválida")
+        if len(stored) >= MAX_SIGNED_PREKEYS_PER_USER:
+            break
+        stored[prekey_id] = {
+            **clean,
+            "state": "available",
+        }
+        accepted.append(prekey_id)
+
+    user_data[SIGNED_PREKEYS_FIELD] = stored
+    return accepted
+
+
+def pop_available_signed_prekey(user_data: dict):
+    stored = user_data.get(SIGNED_PREKEYS_FIELD)
+    if not isinstance(stored, dict):
+        return None
+
+    for prekey_id, prekey in sorted(stored.items(), key=lambda item: item[1].get("created_at", "")):
+        if not isinstance(prekey, dict) or prekey.get("state") != "available":
+            continue
+        clean = clean_public_signed_prekey(prekey)
+        stored[prekey_id] = {
+            **prekey,
+            "state": "used",
+        }
+        user_data[SIGNED_PREKEYS_FIELD] = stored
+        return clean
+
+    return None
 
 
 def canonical_public_key_pem(public_key_pem: str):
@@ -350,6 +599,8 @@ def handle_client(conn, addr, security_ctx):
                 if registered_user(users, target) is None:
                     send_json(conn, {"status": "error", "message": "utilizador não existe"})
                 else:
+                    with online_users_lock:
+                        target_online = target in online_users
                     send_json(conn, {
                         "status": "ok",
                         "target": target,
@@ -357,7 +608,67 @@ def handle_client(conn, addr, security_ctx):
                         E2EE_PUBLIC_KEY_FIELD: users[target].get(E2EE_PUBLIC_KEY_FIELD),
                         E2EE_PUBLIC_KEY_SIGNATURE_FIELD: users[target].get(E2EE_PUBLIC_KEY_SIGNATURE_FIELD),
                         "certificate": users[target].get("certificate"),
+                        "online": target_online,
                     })
+
+            elif command == "publish_prekeys":
+                with users_lock():
+                    users = load_users()
+                    user_data = registered_user(users, authenticated_username)
+                    if user_data is None:
+                        send_json(conn, {"status": "error", "message": "utilizador não registado"})
+                        continue
+
+                    try:
+                        accepted = publish_signed_prekeys_for_user(
+                            user_data,
+                            authenticated_username,
+                            msg.get("prekeys"),
+                        )
+                    except Exception as exc:
+                        send_json(conn, {"status": "error", "message": str(exc)})
+                        continue
+
+                    users[authenticated_username] = user_data
+                    save_users(users)
+
+                send_json(conn, {
+                    "status": "ok",
+                    "accepted_prekey_ids": accepted,
+                    "available_prekeys": sum(
+                        1
+                        for prekey in user_data.get(SIGNED_PREKEYS_FIELD, {}).values()
+                        if isinstance(prekey, dict) and prekey.get("state") == "available"
+                    ),
+                })
+
+            elif command == "get_prekey":
+                target = msg.get("target")
+                with users_lock():
+                    users = load_users()
+                    user_data = registered_user(users, target)
+                    if user_data is None:
+                        send_json(conn, {"status": "error", "message": "utilizador não existe"})
+                        continue
+
+                    try:
+                        prekey = pop_available_signed_prekey(user_data)
+                    except Exception as exc:
+                        send_json(conn, {"status": "error", "message": str(exc)})
+                        continue
+
+                    if prekey is None:
+                        send_json(conn, {"status": "error", "message": "sem signed prekeys disponíveis"})
+                        continue
+
+                    users[target] = user_data
+                    save_users(users)
+
+                send_json(conn, {
+                    "status": "ok",
+                    "target": target,
+                    "prekey": prekey,
+                })
 
             elif command == "send_message":
                 users = load_users()
@@ -375,6 +686,9 @@ def handle_client(conn, addr, security_ctx):
                     continue
 
                 envelope, delivered_online, stored_encrypted = deliver_or_store_message(msg, users)
+                if msg.get("type") in ONLINE_ONLY_MESSAGE_TYPES and not delivered_online:
+                    send_json(conn, {"status": "error", "message": "destinatário offline para sessão online"})
+                    continue
 
                 send_json(conn, {
                     "status": "ok",
@@ -383,6 +697,23 @@ def handle_client(conn, addr, security_ctx):
                     "stored_encrypted": stored_encrypted,
                     "delivered_online": delivered_online,
                 })
+
+            elif command == "relay_session_envelope":
+                users = load_users()
+
+                if msg.get("type") not in {SESSION_RESPONSE_TYPE}:
+                    continue
+
+                if not is_valid_envelope(msg):
+                    continue
+
+                if registered_user(users, msg["to"]) is None:
+                    continue
+
+                if msg["from"] != authenticated_username:
+                    continue
+
+                deliver_or_store_message(msg, users)
 
             elif command == "fetch_messages":
                 requested_username = msg.get("username")
