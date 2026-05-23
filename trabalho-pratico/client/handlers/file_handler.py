@@ -1,7 +1,9 @@
 import json
 import os
+import hashlib
 import sys
 import tempfile
+import threading
 from pathlib import Path
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
@@ -24,6 +26,8 @@ BUNDLE_VERSION = 1
 MESSAGE_FILE_TYPE = "ssi_message"
 MESSAGE_FILE_VERSION = 1
 MESSAGE_FILE_ALGORITHM = "ssi-e2ee-v2-aes-256-gcm-aad"
+IMPORTED_BUNDLES_DIR = ROOT_DIR / "contacts"
+_IMPORTED_BUNDLES_LOCK = threading.RLock()
 
 
 def _read_json_file(path):
@@ -53,20 +57,58 @@ def _write_json_file(path, data):
     os.replace(tmp_path, path)
 
 
+def _format_fingerprint(hex_digest):
+    return ":".join(hex_digest[index:index + 2].upper() for index in range(0, len(hex_digest), 2))
+
+
+def _normalize_fingerprint(fingerprint):
+    if not isinstance(fingerprint, str):
+        return None
+    compact = fingerprint.replace(":", "").strip().upper()
+    if len(compact) != 64 or any(char not in "0123456789ABCDEF" for char in compact):
+        return None
+    return _format_fingerprint(compact)
+
+
+def identity_key_fingerprint(identity_key):
+    if isinstance(identity_key, str):
+        identity_key = public_key_from_pem(identity_key)
+    serialized_key = public_key_to_pem(identity_key).encode("utf-8")
+    return _format_fingerprint(hashlib.sha256(serialized_key).hexdigest())
+
+
+def imported_bundles_path(state):
+    custom_path = getattr(state, "imported_bundles_path", None)
+    if custom_path:
+        return custom_path
+    return str(IMPORTED_BUNDLES_DIR / f"{state.username}_bundles.json")
+
+
+def _read_imported_bundles_file(path):
+    if not os.path.exists(path):
+        return {}
+    data = _read_json_file(path)
+    if not isinstance(data, dict):
+        raise ValueError("ficheiro local de bundles inválido")
+    return data
+
+
 def build_public_bundle(state):
+    identity_public_key_pem = public_key_to_pem(state.public_key)
     e2ee_public_key_pem = public_key_to_pem(state.x25519_public_key)
     return {
         "type": BUNDLE_TYPE,
         "version": BUNDLE_VERSION,
         "username": state.username,
         "public_keys": {
-            "identity_key": public_key_to_pem(state.public_key),
+            "identity_key": identity_public_key_pem,
             "e2ee_key": e2ee_public_key_pem,
             "e2ee_key_signature": sign_message(
                 e2ee_public_key_binding_bytes(state.username, e2ee_public_key_pem),
                 state.private_key,
             ),
         },
+        "fingerprint": identity_key_fingerprint(identity_public_key_pem),
         "exported_at": utc_timestamp(),
     }
 
@@ -95,11 +137,16 @@ def validate_public_bundle(bundle):
     if not verify_signature(e2ee_public_key_binding_bytes(username, e2ee_key_pem), e2ee_key_signature, identity_key):
         raise ValueError("assinatura da chave E2EE inválida")
 
+    declared_fingerprint = bundle.get("fingerprint")
+    if declared_fingerprint is not None:
+        normalized_fingerprint = _normalize_fingerprint(declared_fingerprint)
+        if normalized_fingerprint is None or normalized_fingerprint != identity_key_fingerprint(identity_key):
+            raise ValueError("fingerprint da identity_key não corresponde ao bundle")
+
     return username, identity_key, e2ee_key
 
 
-def import_public_bundle(state, bundle):
-    username, identity_key, e2ee_key = validate_public_bundle(bundle)
+def _ensure_public_bundle_can_be_imported(state, username, identity_key, e2ee_key):
     if username == state.username:
         raise ValueError("não é necessário importar o próprio bundle")
 
@@ -110,11 +157,86 @@ def import_public_bundle(state, bundle):
             raise ValueError("bundle tenta substituir chave de identidade já conhecida")
         if existing_e2ee is not None and public_key_to_pem(existing_e2ee) != public_key_to_pem(e2ee_key):
             raise ValueError("bundle tenta substituir chave E2EE já conhecida")
+
+
+def _cache_public_bundle(state, username, identity_key, e2ee_key):
+    with state.key_cache_lock:
         state.key_cache[username] = identity_key
         state.e2ee_key_cache[username] = e2ee_key
         state.contacts.add(username)
 
+
+def import_public_bundle(state, bundle):
+    username, identity_key, e2ee_key = validate_public_bundle(bundle)
+    _ensure_public_bundle_can_be_imported(state, username, identity_key, e2ee_key)
+    _cache_public_bundle(state, username, identity_key, e2ee_key)
     return username
+
+
+def sanitize_public_bundle(bundle):
+    username, identity_key, _ = validate_public_bundle(bundle)
+    public_keys = bundle["public_keys"]
+    clean_bundle = {
+        "type": BUNDLE_TYPE,
+        "version": BUNDLE_VERSION,
+        "username": username,
+        "public_keys": {
+            "identity_key": public_keys["identity_key"],
+            "e2ee_key": public_keys["e2ee_key"],
+            "e2ee_key_signature": public_keys["e2ee_key_signature"],
+        },
+        "fingerprint": identity_key_fingerprint(identity_key),
+    }
+    exported_at = bundle.get("exported_at")
+    if isinstance(exported_at, str) and exported_at:
+        clean_bundle["exported_at"] = exported_at
+    return clean_bundle
+
+
+def save_imported_bundle(state, bundle):
+    clean_bundle = sanitize_public_bundle(bundle)
+    username = clean_bundle["username"]
+    path = imported_bundles_path(state)
+
+    with _IMPORTED_BUNDLES_LOCK:
+        bundles = _read_imported_bundles_file(path)
+        existing = bundles.get(username)
+        if existing is not None:
+            existing_clean = sanitize_public_bundle(existing)
+            if existing_clean["fingerprint"] != clean_bundle["fingerprint"]:
+                raise ValueError("bundle persistido tenta substituir chave de identidade já conhecida")
+            if existing_clean["public_keys"]["e2ee_key"] != clean_bundle["public_keys"]["e2ee_key"]:
+                raise ValueError("bundle persistido tenta substituir chave E2EE já conhecida")
+        bundles[username] = clean_bundle
+        _write_json_file(path, bundles)
+
+    return clean_bundle
+
+
+def load_imported_bundles(state):
+    path = imported_bundles_path(state)
+    try:
+        with _IMPORTED_BUNDLES_LOCK:
+            bundles = _read_imported_bundles_file(path)
+    except Exception as exc:
+        print(f"[AVISO] não foi possível ler bundles importados: {exc}")
+        return False
+
+    loaded = 0
+    for username, bundle in sorted(bundles.items()):
+        if not isinstance(username, str) or not username:
+            print("[AVISO] bundle persistido com username inválido ignorado.")
+            continue
+        try:
+            clean_bundle = sanitize_public_bundle(bundle)
+            if clean_bundle["username"] != username:
+                raise ValueError("username persistido não corresponde ao bundle")
+            import_public_bundle(state, clean_bundle)
+            loaded += 1
+        except Exception as exc:
+            print(f"[AVISO] bundle persistido de {username} ignorado: {exc}")
+
+    return loaded
 
 
 def build_message_file(envelope):
@@ -149,22 +271,28 @@ def validate_message_file(data):
 
 def cmd_export_bundle(state, path):
     try:
-        _write_json_file(path, build_public_bundle(state))
+        bundle = build_public_bundle(state)
+        _write_json_file(path, bundle)
     except Exception as exc:
         print(f"Erro ao exportar bundle: {exc}")
         return False
     print(f"Bundle público exportado para {path}.")
+    print(f"Fingerprint identity_key: {bundle['fingerprint']}")
     return True
 
 
 def cmd_import_bundle(state, path):
     try:
         bundle = _read_json_file(path)
-        username = import_public_bundle(state, bundle)
+        username, identity_key, e2ee_key = validate_public_bundle(bundle)
+        _ensure_public_bundle_can_be_imported(state, username, identity_key, e2ee_key)
+        clean_bundle = save_imported_bundle(state, bundle)
+        _cache_public_bundle(state, username, identity_key, e2ee_key)
     except Exception as exc:
         print(f"Erro ao importar bundle: {exc}")
         return False
     print(f"Bundle de {username} importado.")
+    print(f"Fingerprint identity_key: {clean_bundle['fingerprint']}")
     return True
 
 

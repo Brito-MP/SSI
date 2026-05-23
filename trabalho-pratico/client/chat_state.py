@@ -70,6 +70,7 @@ class ChatState:
     key_cache_lock: threading.Lock = field(default_factory=threading.Lock)
     contacts: set = field(default_factory=set)
     active_conversation: str | None = None
+    imported_bundles_path: str | None = None
 
     def has_seen_message(self, message_id):
         if not isinstance(message_id, str) or not message_id:
@@ -119,4 +120,10 @@ class ChatState:
         )
         state.key_cache[username] = public_key
         state.e2ee_key_cache[username] = x25519_public_key
+        try:
+            from handlers.file_handler import load_imported_bundles
+
+            load_imported_bundles(state)
+        except Exception as exc:
+            print(f"[AVISO] não foi possível carregar bundles importados: {exc}")
         return state

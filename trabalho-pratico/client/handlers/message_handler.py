@@ -8,6 +8,7 @@ if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
 from crypto_utils import (
+    build_group_aad,
     build_message_aad,
     canonical_message_bytes,
     decrypt_group_payload,
@@ -40,6 +41,11 @@ from handlers.conversation_handler import save_to_history
 
 GROUP_ACTION_DELETE = "delete"
 GROUP_ACTION_LEAVE = "leave"
+GROUP_ACTION_MESSAGE = "message"
+GROUP_ACTION_KEY_ROTATION = "key_rotation"
+GROUP_CONTROL_TYPE = "group_control"
+GROUP_ROTATION_PENDING_FIELD = "group_key_rotation_pending"
+GROUP_ROTATION_LEADER_FIELD = "group_key_rotation_leader"
 
 
 def group_id_from_name(name: str):
@@ -82,11 +88,7 @@ def build_message_envelope(my_username, target, text, my_private_key, recipient_
     if group is not None:
         envelope_to_sign.update({
             "group_id": group["id"],
-            "group_name": group["name"],
-            "group_members": group["members"],
         })
-    if group_action is not None:
-        envelope_to_sign["group_action"] = group_action
 
     signature = sign_message(canonical_message_bytes(envelope_to_sign), my_private_key)
 
@@ -104,6 +106,19 @@ def group_key_share_plaintext(group_id, group):
         "members": sorted(set(group.get("members", []))),
         "group_key": group["group_key"],
         "group_key_version": normalize_group_key_version(group.get("group_key_version")),
+        "action": GROUP_ACTION_KEY_ROTATION,
+    }
+    return json.dumps(payload, separators=(",", ":"))
+
+
+def group_control_plaintext(group_info, text, group_action):
+    payload = {
+        "type": GROUP_CONTROL_TYPE,
+        "group_id": group_info["id"],
+        "group_name": group_info.get("name", group_info["id"]),
+        "members": sorted(set(group_info.get("members", []))),
+        "text": text,
+        "action": group_action,
     }
     return json.dumps(payload, separators=(",", ":"))
 
@@ -111,13 +126,10 @@ def group_key_share_plaintext(group_id, group):
 def build_group_message_payload(my_username, group_id, group, text, message_id, timestamp):
     return {
         "type": GROUP_MESSAGE_TYPE,
-        "group_id": group_id,
         "group_name": group.get("name", group_id),
         "members": sorted(set(group.get("members", []))),
-        "from": my_username,
         "text": text,
-        "timestamp": timestamp,
-        "message_id": message_id,
+        "action": GROUP_ACTION_MESSAGE,
         "group_key_version": normalize_group_key_version(group.get("group_key_version")),
     }
 
@@ -126,13 +138,14 @@ def build_group_message_envelope(my_username, target, group_id, encrypted_payloa
     envelope_to_sign = {
         "type": GROUP_MESSAGE_TYPE,
         "group_id": group_id,
-        "group_key_version": encrypted_payload["group_key_version"],
         "message_id": message_id,
         "timestamp": timestamp,
         "from": my_username,
         "to": target,
-        "nonce": encrypted_payload["nonce"],
-        "ciphertext": encrypted_payload["ciphertext"],
+        "payload": {
+            "nonce": encrypted_payload["nonce"],
+            "ciphertext": encrypted_payload["ciphertext"],
+        },
     }
     signature = sign_message(canonical_message_bytes(group_message_signed_part(envelope_to_sign)), my_private_key)
     return {
@@ -175,15 +188,30 @@ def get_sender_public_key(msg, state):
 
 
 def process_incoming_group_message(msg, state, message_id):
-    required_fields = ["type", "group_id", "timestamp", "from", "to", "nonce", "ciphertext", "signature"]
+    required_fields = ["type", "group_id", "timestamp", "from", "to", "signature"]
     for required_field in required_fields:
         if not isinstance(msg.get(required_field), str) or not msg.get(required_field):
             return
+    encrypted_payload = msg.get("payload")
+    if not isinstance(encrypted_payload, dict):
+        return
+    if not all(isinstance(encrypted_payload.get(field), str) and encrypted_payload.get(field) for field in ["nonce", "ciphertext"]):
+        return
 
     sender_key = get_sender_public_key(msg, state)
     sender = msg.get("from")
     if sender_key is None:
         print(f"[AVISO] sem chave pública local para validar assinatura de {sender}.")
+        return
+
+    group_id = msg["group_id"]
+    group = state.groups.get(group_id)
+    if not isinstance(group, dict) or not is_valid_group_key(group.get("group_key")):
+        if isinstance(group, dict) and group.get(GROUP_ROTATION_PENDING_FIELD) is True:
+            rotation_leader = group.get(GROUP_ROTATION_LEADER_FIELD, "outro membro")
+            print(f"[AVISO] a aguardar nova group_key de {rotation_leader} para {group_id}.")
+            return
+        print(f"[AVISO] sem group_key local para decifrar mensagem do grupo {group_id}.")
         return
 
     valid = verify_signature(
@@ -195,41 +223,29 @@ def process_incoming_group_message(msg, state, message_id):
         print(f"[AVISO] assinatura inválida de {sender} na mensagem de grupo {message_id}.")
         return
 
-    group_id = msg["group_id"]
-    group = state.groups.get(group_id)
-    if not isinstance(group, dict) or not is_valid_group_key(group.get("group_key")):
-        print(f"[AVISO] sem group_key local para decifrar mensagem do grupo {group_id}.")
-        return
-    msg_key_version = normalize_group_key_version(msg.get("group_key_version"))
     group_key_version = normalize_group_key_version(group.get("group_key_version"))
-    if msg_key_version != group_key_version:
-        print(f"[AVISO] sem group_key versão {msg_key_version} para decifrar mensagem do grupo {group_id}.")
-        return
 
     try:
-        aad = build_message_aad(message_id, sender, msg["to"], msg["timestamp"])
-        payload = decrypt_group_payload(group["group_key"], msg["nonce"], msg["ciphertext"], aad)
+        aad = build_group_aad(group_id, sender, msg["to"], message_id, msg["timestamp"])
+        payload = decrypt_group_payload(group["group_key"], encrypted_payload["nonce"], encrypted_payload["ciphertext"], aad)
     except Exception as exc:
         print(f"[AVISO] não foi possível decifrar a mensagem de grupo {message_id}: {exc}")
         return
 
     if payload.get("type") != GROUP_MESSAGE_TYPE:
         return
-    if payload.get("group_id") != group_id or payload.get("message_id") != message_id:
-        print(f"[AVISO] metadados inconsistentes na mensagem de grupo {message_id}.")
+    if payload.get("action") != GROUP_ACTION_MESSAGE:
+        print(f"[AVISO] ação de grupo inválida na mensagem {message_id}.")
         return
-    if normalize_group_key_version(payload.get("group_key_version")) != msg_key_version:
+    if normalize_group_key_version(payload.get("group_key_version")) != group_key_version:
         print(f"[AVISO] versão da group_key inconsistente na mensagem de grupo {message_id}.")
         return
-    if payload.get("from") != sender:
-        print(f"[AVISO] remetente inconsistente na mensagem de grupo {message_id}.")
-        return
-    if not isinstance(payload.get("text"), str) or not isinstance(payload.get("timestamp"), str):
+    if not isinstance(payload.get("text"), str):
         return
 
     history_msg = {
         "message_id": message_id,
-        "timestamp": payload["timestamp"],
+        "timestamp": msg["timestamp"],
         "from": sender,
         "to": group_id,
         "group_id": group_id,
@@ -241,7 +257,7 @@ def process_incoming_group_message(msg, state, message_id):
         return
 
     group_name = history_msg["group_name"]
-    print(f"\n[Nova mensagem em {group_name}] {sender}: {payload['text']} ({payload['timestamp']})")
+    print(f"\n[Nova mensagem em {group_name}] {sender}: {payload['text']} ({msg['timestamp']})")
 
 
 def handle_group_key_share_message(state, msg, payload, message_id):
@@ -277,6 +293,15 @@ def handle_group_key_share_message(state, msg, payload, message_id):
     if received_version < existing_version:
         print(f"[AVISO] group_key antiga ignorada para {group_id}.")
         return
+    if isinstance(existing_group, dict):
+        expected_leader = existing_group.get(GROUP_ROTATION_LEADER_FIELD) if existing_group.get(GROUP_ROTATION_PENDING_FIELD) is True else None
+        if isinstance(expected_leader, str) and expected_leader and sender != expected_leader:
+            print(f"[AVISO] partilha de group_key ignorada para {group_id}: aguardava {expected_leader}.")
+            return
+        existing_key = existing_group.get("group_key")
+        if received_version == existing_version and is_valid_group_key(existing_key) and existing_key != group.get("group_key"):
+            print(f"[AVISO] group_key concorrente ignorada para {group_id}.")
+            return
 
     state.groups[group_id] = group
     state.groups_dirty = True
@@ -314,7 +339,7 @@ def process_incoming_message(msg, state):
         "to": msg["to"],
         "payload": msg["payload"],
     }
-    for optional_field in ["group_id", "group_name", "group_members", "group_action"]:
+    for optional_field in ["group_id"]:
         if optional_field in msg:
             signed_part[optional_field] = msg[optional_field]
 
@@ -335,30 +360,33 @@ def process_incoming_message(msg, state):
         handle_group_key_share_message(state, msg, control_payload, message_id)
         return
 
-    if msg.get("group_action") == GROUP_ACTION_DELETE:
+    if control_payload is not None and control_payload.get("type") == GROUP_CONTROL_TYPE:
         if not state.mark_message_seen(message_id):
             return
-        handle_group_delete_message(state, msg, plaintext)
+        if msg.get("group_id") and control_payload.get("group_id") != msg.get("group_id"):
+            print(f"[AVISO] metadados de grupo inconsistentes na mensagem {message_id}.")
+            return
+        action = control_payload.get("action")
+        if action == GROUP_ACTION_DELETE:
+            handle_group_delete_message(state, msg, control_payload)
+        elif action == GROUP_ACTION_LEAVE:
+            handle_group_leave_message(state, msg, control_payload)
+        else:
+            print(f"[AVISO] ação de grupo inválida na mensagem {message_id}.")
         return
 
-    if msg.get("group_action") == GROUP_ACTION_LEAVE:
-        if not state.mark_message_seen(message_id):
-            return
-        handle_group_leave_message(state, msg, plaintext)
+    if msg.get("group_id"):
+        print(f"[AVISO] mensagem de grupo privada sem payload de controlo ignorada: {message_id}.")
         return
 
     if not save_to_history(state, msg, plaintext):
         return
 
-    if msg.get("group_id"):
-        group_name = msg.get("group_name", msg["group_id"])
-        print(f"\n[Nova mensagem em {group_name}] {sender}: {plaintext} ({msg['timestamp']})")
-    else:
-        print(f"\n[Nova mensagem] {sender}: {plaintext} ({msg['timestamp']})")
+    print(f"\n[Nova mensagem] {sender}: {plaintext} ({msg['timestamp']})")
 
 
-def handle_group_delete_message(state, msg, plaintext):
-    group_id = msg.get("group_id")
+def handle_group_delete_message(state, msg, payload):
+    group_id = payload.get("group_id") or msg.get("group_id")
     sender = msg.get("from")
     if not isinstance(group_id, str) or not group_id:
         return
@@ -377,14 +405,15 @@ def handle_group_delete_message(state, msg, plaintext):
     if state.active_conversation == group_id:
         state.active_conversation = None
 
-    group_name = msg.get("group_name", group_id)
+    group_name = payload.get("group_name", group_id)
     if removed_group is not None:
         group_name = removed_group.get("name", group_name)
+    plaintext = payload.get("text", "")
     print(f"\n[Grupo removido] {group_name}: {plaintext}")
 
 
-def handle_group_leave_message(state, msg, plaintext):
-    group_id = msg.get("group_id")
+def handle_group_leave_message(state, msg, payload):
+    group_id = payload.get("group_id") or msg.get("group_id")
     leaving_user = msg.get("from")
     if not isinstance(group_id, str) or not group_id:
         return
@@ -401,19 +430,52 @@ def handle_group_leave_message(state, msg, plaintext):
     if state.username not in remaining_members:
         return
 
+    rotation_leader = get_group_rotation_leader(remaining_members)
+    if rotation_leader is None:
+        return
+
     group["members"] = remaining_members
-    state.groups[group_id] = rotate_group_key(group)
+    if state.username == rotation_leader:
+        state.groups[group_id] = rotate_group_key(group)
+    else:
+        state.groups[group_id] = mark_group_key_rotation_pending(group, rotation_leader)
     state.groups_dirty = True
-    if update_groups(state) and state.username == remaining_members[0]:
+    updated = update_groups(state)
+    if updated and state.username == rotation_leader:
         send_group_key_shares(state, group_id)
 
+    plaintext = payload.get("text", "")
     print(f"\n[Grupo] {leaving_user} saiu de {group.get('name', group_id)}: {plaintext}")
+    if state.username != rotation_leader:
+        print(f"[Grupo] A aguardar rotação da group_key de {group_id} por {rotation_leader}.")
 
 
 def rotate_group_key(group):
     old_version = normalize_group_key_version(group.get("group_key_version"))
     group["group_key"] = generate_group_key()
     group["group_key_version"] = old_version + 1
+    group.pop(GROUP_ROTATION_PENDING_FIELD, None)
+    group.pop(GROUP_ROTATION_LEADER_FIELD, None)
+    return group
+
+
+def get_group_rotation_leader(group_or_members):
+    if isinstance(group_or_members, dict):
+        members = group_or_members.get("members", [])
+    else:
+        members = group_or_members
+    clean_members = sorted({member.strip() for member in members if isinstance(member, str) and member.strip()})
+    if not clean_members:
+        return None
+    return clean_members[0]
+
+
+def mark_group_key_rotation_pending(group, rotation_leader):
+    old_version = normalize_group_key_version(group.get("group_key_version"))
+    group.pop("group_key", None)
+    group["group_key_version"] = old_version + 1
+    group[GROUP_ROTATION_PENDING_FIELD] = True
+    group[GROUP_ROTATION_LEADER_FIELD] = rotation_leader
     return group
 
 
@@ -726,28 +788,13 @@ def cmd_remove_group(state, group_id):
     failed_members = []
 
     for member in members:
-        target_public_key = get_user_key(state, member)
-        if target_public_key is None:
-            failed_members.append(member)
-            continue
-
-        envelope = build_message_envelope(
-            state.username,
+        if not send_group_control_message(
+            state,
             member,
+            group_info,
             f"Grupo '{group_info['name']}' removido por {state.username}.",
-            state.private_key,
-            target_public_key,
-            group=group_info,
-            group_action=GROUP_ACTION_DELETE,
-        )
-        resp = send_request(
-            state.sock,
-            state.response_queue,
-            state.stop_event,
-            {"command": "send_message", **envelope},
-        )
-
-        if resp is None or resp.get("status") != "ok":
+            GROUP_ACTION_DELETE,
+        ):
             failed_members.append(member)
 
     removed_group = state.groups.pop(group_id)
@@ -772,14 +819,14 @@ def send_group_control_message(state, member, group_info, text, group_action):
     if target_public_key is None:
         return False
 
+    plaintext = group_control_plaintext(group_info, text, group_action)
     envelope = build_message_envelope(
         state.username,
         member,
-        text,
+        plaintext,
         state.private_key,
         target_public_key,
         group=group_info,
-        group_action=group_action,
     )
     resp = send_request(
         state.sock,
@@ -900,6 +947,11 @@ def cmd_send_group(state, group_id, text):
         print("Grupo desconhecido.")
         return
 
+    if group.get(GROUP_ROTATION_PENDING_FIELD) is True:
+        rotation_leader = group.get(GROUP_ROTATION_LEADER_FIELD, "outro membro")
+        print(f"A aguardar rotação da group_key de {group_id} por {rotation_leader}; sincroniza depois de receberes a nova chave.")
+        return
+
     if not is_valid_group_key(group.get("group_key")):
         print("Grupo sem group_key, recrie o grupo.")
         return
@@ -915,7 +967,7 @@ def cmd_send_group(state, group_id, text):
     payload = build_group_message_payload(state.username, group_id, group, text, message_id, timestamp)
 
     for member in members:
-        aad = build_message_aad(message_id, state.username, member, timestamp)
+        aad = build_group_aad(group_id, state.username, member, message_id, timestamp)
         encrypted_payload = encrypt_group_payload(group["group_key"], payload, aad)
         envelope = build_group_message_envelope(
             state.username,
