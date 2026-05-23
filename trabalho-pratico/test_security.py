@@ -40,8 +40,10 @@ from handlers.message_handler import (
     build_group_message_envelope,
     build_group_message_payload,
     build_message_envelope,
+    cmd_remove_group_member,
     group_key_share_plaintext,
     process_incoming_message,
+    rotate_group_key,
 )
 import storage
 from crypto_utils import (
@@ -163,6 +165,7 @@ def group_model(group_key=None):
         "name": "Equipa",
         "members": ["alice", "bob"],
         "group_key": group_key or generate_group_key(),
+        "group_key_version": 1,
     }
 
 
@@ -568,6 +571,7 @@ def test_group_key_share_uses_individual_e2ee_without_plain_key():
     decoded = json.loads(decrypt_from_sender(envelope["payload"], recipient_priv, aad=aad))
     assert decoded["type"] == GROUP_KEY_SHARE_TYPE
     assert decoded["group_key"] == group["group_key"]
+    assert decoded["group_key_version"] == group["group_key_version"]
     assert decoded["group_id"] == "group-equipa"
 
     print("OK - group_key só aparece depois de decifrar E2EE")
@@ -593,6 +597,7 @@ def test_receiving_group_key_share_updates_local_group():
     process_incoming_message(envelope, state)
 
     assert state.groups["group-equipa"]["group_key"] == group["group_key"]
+    assert state.groups["group-equipa"]["group_key_version"] == group["group_key_version"]
     assert state.groups["group-equipa"]["members"] == ["alice", "bob"]
     assert state.conversations["group-equipa"] == []
     assert state.has_seen_message(envelope["message_id"])
@@ -674,7 +679,7 @@ def test_server_cannot_see_group_text_or_key():
         assert stored_envelope == envelope
         assert "texto invisível ao servidor" not in stored_json
         assert group["group_key"] not in stored_json
-        assert "group_key" not in stored_json
+        assert '"group_key":' not in stored_json
 
     print("OK - servidor guarda só envelope cifrado de grupo")
 
@@ -980,6 +985,122 @@ def test_offline_sync_delivers_group_message_envelope():
     print("OK - grupo offline chega pelo sync")
 
 
+def test_group_key_rotation_changes_key_and_version():
+    print("\n[TESTE] Rotação de group_key muda chave e versão")
+
+    group = group_model()
+    old_key = group["group_key"]
+    old_version = group["group_key_version"]
+
+    rotate_group_key(group)
+
+    assert group["group_key"] != old_key
+    assert group["group_key_version"] == old_version + 1
+
+    print("OK - group_key rodada com nova versão")
+
+
+def test_remove_member_rotates_and_shares_only_with_remaining_members():
+    print("\n[TESTE] Remover membro roda chave e partilha só com restantes")
+
+    state = make_user_state("alice")
+    state.groups["group-equipa"] = {
+        "name": "Equipa",
+        "members": ["alice", "bob", "carla"],
+        "group_key": generate_group_key(),
+        "group_key_version": 1,
+    }
+    old_key = state.groups["group-equipa"]["group_key"]
+    shares = []
+    globals_ = cmd_remove_group_member.__globals__
+    originals = {
+        "sync_groups": globals_["sync_groups"],
+        "update_groups": globals_["update_groups"],
+        "send_group_control_message": globals_["send_group_control_message"],
+        "send_group_key_shares": globals_["send_group_key_shares"],
+    }
+
+    def fake_send_group_key_shares(fake_state, group_id):
+        group = fake_state.groups[group_id]
+        for share_member in sorted(user for user in group["members"] if user != fake_state.username):
+            shares.append((share_member, group["group_key"], group["group_key_version"]))
+        return []
+
+    try:
+        globals_["sync_groups"] = lambda fake_state: True
+        globals_["update_groups"] = lambda fake_state: True
+        globals_["send_group_control_message"] = lambda *args, **kwargs: True
+        globals_["send_group_key_shares"] = fake_send_group_key_shares
+
+        cmd_remove_group_member(state, "group-equipa", "bob")
+    finally:
+        globals_.update(originals)
+
+    group = state.groups["group-equipa"]
+    assert group["members"] == ["alice", "carla"]
+    assert group["group_key"] != old_key
+    assert group["group_key_version"] == 2
+    assert shares == [("carla", group["group_key"], 2)]
+
+    print("OK - membro removido não recebeu nova group_key")
+
+
+def test_group_messages_after_rotation_use_new_key_version():
+    print("\n[TESTE] Mensagens após remoção usam nova versão da group_key")
+
+    group = {
+        "name": "Equipa",
+        "members": ["alice", "carla"],
+        "group_key": generate_group_key(),
+        "group_key_version": 1,
+    }
+    removed_member_group = copy.deepcopy(group)
+    rotate_group_key(group)
+    message_id = "rotated-group-msg"
+    timestamp = "2026-05-23T12:00:00Z"
+    payload = build_group_message_payload("alice", "group-equipa", group, "segredo futuro", message_id, timestamp)
+    aad = build_message_aad(message_id, "alice", "carla", timestamp)
+    encrypted = encrypt_group_payload(group["group_key"], payload, aad)
+
+    assert encrypted["group_key_version"] == 2
+    decoded = decrypt_group_payload(group["group_key"], encrypted["nonce"], encrypted["ciphertext"], aad)
+    assert decoded["text"] == "segredo futuro"
+    assert decoded["group_key_version"] == 2
+
+    try:
+        decrypt_group_payload(removed_member_group["group_key"], encrypted["nonce"], encrypted["ciphertext"], aad)
+    except Exception:
+        pass
+    else:
+        raise AssertionError("membro removido decifrou mensagem futura com chave antiga")
+
+    print("OK - chave antiga não decifra mensagens futuras")
+
+
+def test_remove_missing_group_member_does_not_corrupt_group():
+    print("\n[TESTE] Remover membro inexistente não corrompe grupo")
+
+    state = make_user_state("alice")
+    original_group = {
+        "name": "Equipa",
+        "members": ["alice", "bob"],
+        "group_key": generate_group_key(),
+        "group_key_version": 1,
+    }
+    state.groups["group-equipa"] = copy.deepcopy(original_group)
+    globals_ = cmd_remove_group_member.__globals__
+    original_sync_groups = globals_["sync_groups"]
+    try:
+        globals_["sync_groups"] = lambda fake_state: True
+        cmd_remove_group_member(state, "group-equipa", "carla")
+    finally:
+        globals_["sync_groups"] = original_sync_groups
+
+    assert state.groups["group-equipa"] == original_group
+
+    print("OK - grupo preservado")
+
+
 def run_threads(worker, count):
     errors = []
     errors_lock = threading.Lock()
@@ -1100,6 +1221,7 @@ def test_groups_metadata_normalization():
         "group-equipa": {
             "name": "Equipa",
             "members": ["goncalo", "simao"],
+            "group_key_version": 1,
         }
     }
     assert normalize_groups("inválido") == {}
@@ -1123,6 +1245,7 @@ def test_protected_groups_roundtrip():
         "group-equipa": {
             "name": "Equipa",
             "members": ["goncalo", "simao"],
+            "group_key_version": 1,
         }
     }
 
@@ -1151,10 +1274,11 @@ def test_protected_groups_preserve_group_key_without_plaintext():
     protected_json = json.dumps(protected_groups)
 
     assert group["group_key"] not in protected_json
-    assert "group_key" not in protected_json
+    assert '"group_key":' not in protected_json
 
     groups = unprotect_groups(protected_groups, "henrique", priv, pub)
     assert groups["group-equipa"]["group_key"] == group["group_key"]
+    assert groups["group-equipa"]["group_key_version"] == group["group_key_version"]
 
     print("OK - group_key fica só no payload decifrado")
 
@@ -1282,6 +1406,10 @@ def run_all():
     test_import_msg_rejects_aad_metadata_tampering()
     test_group_message_duplicate_is_ignored()
     test_offline_sync_delivers_group_message_envelope()
+    test_group_key_rotation_changes_key_and_version()
+    test_remove_member_rotates_and_shares_only_with_remaining_members()
+    test_group_messages_after_rotation_use_new_key_version()
+    test_remove_missing_group_member_does_not_corrupt_group()
     test_concurrent_user_updates_keep_valid_json()
     test_concurrent_message_storage_keeps_valid_json()
     test_contacts_metadata_normalization()

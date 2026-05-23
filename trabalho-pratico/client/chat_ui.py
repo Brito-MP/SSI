@@ -4,7 +4,15 @@ from client_connection import send_request
 from handlers.contact_handler import cmd_add_contact, cmd_contacts, cmd_remove_contact
 from handlers.conversation_handler import cmd_conversations, cmd_open
 from handlers.file_handler import cmd_export_bundle, cmd_export_msg, cmd_import_bundle, cmd_import_msg
-from handlers.message_handler import cmd_create_group, cmd_groups, cmd_remove_group, cmd_send, cmd_sync
+from handlers.message_handler import (
+    cmd_create_group,
+    cmd_groups,
+    cmd_leave_group,
+    cmd_remove_group,
+    cmd_remove_group_member,
+    cmd_send,
+    cmd_sync,
+)
 
 
 def current_prompt(state):
@@ -21,6 +29,8 @@ def print_main_help():
     print("  groups")
     print("  create_group \"<nome>\" <user1,user2,...>")
     print("  remove_group <group_id>")
+    print("  remove_member <group_id> <user>")
+    print("  leave_group <group_id>")
     print("  chats")
     print("  open <user|group_id>")
     print("  conversations")
@@ -137,6 +147,24 @@ def run_ui_loop(state):
 
             group_id = parts[1].strip()
             cmd_remove_group(state, group_id)
+
+        elif cmd == "remove_member" or cmd.startswith("remove_member "):
+            parts = cmd.split(" ", 2)
+            if len(parts) != 3 or not parts[1].strip() or not parts[2].strip():
+                print("Uso: remove_member <group_id> <user>")
+                continue
+
+            _, group_id, member = parts
+            cmd_remove_group_member(state, group_id, member)
+
+        elif cmd == "leave_group" or cmd.startswith("leave_group "):
+            parts = cmd.split(" ", 1)
+            if len(parts) < 2 or not parts[1].strip():
+                print("Uso: leave_group <group_id>")
+                continue
+
+            group_id = parts[1].strip()
+            cmd_leave_group(state, group_id)
 
         elif cmd == "list":
             cmd_list_users(state)
