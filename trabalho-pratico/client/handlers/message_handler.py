@@ -22,6 +22,7 @@ from crypto_utils import (
     GROUP_MESSAGE_TYPE,
     group_message_signed_part,
     is_valid_group_key,
+    normalize_group_key_version,
     normalize_groups,
     protect_groups,
     public_key_from_pem,
@@ -38,6 +39,7 @@ from common.security import client_username_from_certificate, validate_certifica
 from handlers.conversation_handler import save_to_history
 
 GROUP_ACTION_DELETE = "delete"
+GROUP_ACTION_LEAVE = "leave"
 
 
 def group_id_from_name(name: str):
@@ -101,6 +103,7 @@ def group_key_share_plaintext(group_id, group):
         "group_name": group.get("name", group_id),
         "members": sorted(set(group.get("members", []))),
         "group_key": group["group_key"],
+        "group_key_version": normalize_group_key_version(group.get("group_key_version")),
     }
     return json.dumps(payload, separators=(",", ":"))
 
@@ -115,6 +118,7 @@ def build_group_message_payload(my_username, group_id, group, text, message_id, 
         "text": text,
         "timestamp": timestamp,
         "message_id": message_id,
+        "group_key_version": normalize_group_key_version(group.get("group_key_version")),
     }
 
 
@@ -122,6 +126,7 @@ def build_group_message_envelope(my_username, target, group_id, encrypted_payloa
     envelope_to_sign = {
         "type": GROUP_MESSAGE_TYPE,
         "group_id": group_id,
+        "group_key_version": encrypted_payload["group_key_version"],
         "message_id": message_id,
         "timestamp": timestamp,
         "from": my_username,
@@ -195,6 +200,11 @@ def process_incoming_group_message(msg, state, message_id):
     if not isinstance(group, dict) or not is_valid_group_key(group.get("group_key")):
         print(f"[AVISO] sem group_key local para decifrar mensagem do grupo {group_id}.")
         return
+    msg_key_version = normalize_group_key_version(msg.get("group_key_version"))
+    group_key_version = normalize_group_key_version(group.get("group_key_version"))
+    if msg_key_version != group_key_version:
+        print(f"[AVISO] sem group_key versão {msg_key_version} para decifrar mensagem do grupo {group_id}.")
+        return
 
     try:
         aad = build_message_aad(message_id, sender, msg["to"], msg["timestamp"])
@@ -207,6 +217,9 @@ def process_incoming_group_message(msg, state, message_id):
         return
     if payload.get("group_id") != group_id or payload.get("message_id") != message_id:
         print(f"[AVISO] metadados inconsistentes na mensagem de grupo {message_id}.")
+        return
+    if normalize_group_key_version(payload.get("group_key_version")) != msg_key_version:
+        print(f"[AVISO] versão da group_key inconsistente na mensagem de grupo {message_id}.")
         return
     if payload.get("from") != sender:
         print(f"[AVISO] remetente inconsistente na mensagem de grupo {message_id}.")
@@ -241,6 +254,7 @@ def handle_group_key_share_message(state, msg, payload, message_id):
             "name": payload.get("group_name", group_id),
             "members": payload.get("members", []),
             "group_key": payload.get("group_key"),
+            "group_key_version": payload.get("group_key_version"),
         }
     })
     group = clean_groups.get(group_id)
@@ -257,6 +271,13 @@ def handle_group_key_share_message(state, msg, payload, message_id):
         return
 
     state.groups_deleted.discard(group_id)
+    existing_group = state.groups.get(group_id)
+    existing_version = normalize_group_key_version(existing_group.get("group_key_version")) if isinstance(existing_group, dict) else 0
+    received_version = normalize_group_key_version(group.get("group_key_version"))
+    if received_version < existing_version:
+        print(f"[AVISO] group_key antiga ignorada para {group_id}.")
+        return
+
     state.groups[group_id] = group
     state.groups_dirty = True
     state.conversations.setdefault(group_id, [])
@@ -320,6 +341,12 @@ def process_incoming_message(msg, state):
         handle_group_delete_message(state, msg, plaintext)
         return
 
+    if msg.get("group_action") == GROUP_ACTION_LEAVE:
+        if not state.mark_message_seen(message_id):
+            return
+        handle_group_leave_message(state, msg, plaintext)
+        return
+
     if not save_to_history(state, msg, plaintext):
         return
 
@@ -354,6 +381,40 @@ def handle_group_delete_message(state, msg, plaintext):
     if removed_group is not None:
         group_name = removed_group.get("name", group_name)
     print(f"\n[Grupo removido] {group_name}: {plaintext}")
+
+
+def handle_group_leave_message(state, msg, plaintext):
+    group_id = msg.get("group_id")
+    leaving_user = msg.get("from")
+    if not isinstance(group_id, str) or not group_id:
+        return
+
+    group = state.groups.get(group_id)
+    if not isinstance(group, dict):
+        return
+
+    members = sorted(set(group.get("members", [])))
+    if leaving_user not in members or state.username not in members:
+        return
+
+    remaining_members = sorted(member for member in members if member != leaving_user)
+    if state.username not in remaining_members:
+        return
+
+    group["members"] = remaining_members
+    state.groups[group_id] = rotate_group_key(group)
+    state.groups_dirty = True
+    if update_groups(state) and state.username == remaining_members[0]:
+        send_group_key_shares(state, group_id)
+
+    print(f"\n[Grupo] {leaving_user} saiu de {group.get('name', group_id)}: {plaintext}")
+
+
+def rotate_group_key(group):
+    old_version = normalize_group_key_version(group.get("group_key_version"))
+    group["group_key"] = generate_group_key()
+    group["group_key_version"] = old_version + 1
+    return group
 
 
 def get_user_key(state, target):
@@ -621,6 +682,7 @@ def cmd_create_group(state, name, members):
         "name": clean_name,
         "members": all_members,
         "group_key": generate_group_key(),
+        "group_key_version": 1,
     }
     state.groups_dirty = True
     if not update_groups(state):
@@ -705,6 +767,130 @@ def cmd_remove_group(state, group_id):
         print(f"Grupo '{removed_group.get('name', group_id)}' removido para todos os membros.")
 
 
+def send_group_control_message(state, member, group_info, text, group_action):
+    target_public_key = get_user_key(state, member)
+    if target_public_key is None:
+        return False
+
+    envelope = build_message_envelope(
+        state.username,
+        member,
+        text,
+        state.private_key,
+        target_public_key,
+        group=group_info,
+        group_action=group_action,
+    )
+    resp = send_request(
+        state.sock,
+        state.response_queue,
+        state.stop_event,
+        {"command": "send_message", **envelope},
+    )
+    return resp is not None and resp.get("status") == "ok"
+
+
+def cmd_remove_group_member(state, group_id, member):
+    sync_groups(state)
+
+    group = state.groups.get(group_id)
+    if group is None:
+        print(f"{group_id} não é um grupo conhecido.")
+        return
+
+    members = sorted(set(group.get("members", [])))
+    if state.username not in members:
+        print("Não pertences a esse grupo.")
+        return
+    if member == state.username:
+        print("Usa leave_group para sair do grupo.")
+        return
+    if member not in members:
+        print(f"{member} não pertence ao grupo.")
+        return
+    if len(members) <= 2:
+        print("Remove o grupo se só resta um membro.")
+        return
+
+    old_group = dict(group)
+    remaining_members = sorted(user for user in members if user != member)
+    group["members"] = remaining_members
+    rotate_group_key(group)
+    state.groups[group_id] = group
+    state.groups_dirty = True
+
+    if not update_groups(state):
+        state.groups[group_id] = old_group
+        return
+
+    group_info = {
+        "id": group_id,
+        "name": group.get("name", group_id),
+        "members": members,
+    }
+    failed = []
+    if not send_group_control_message(
+        state,
+        member,
+        group_info,
+        f"Foste removido do grupo '{group_info['name']}' por {state.username}.",
+        GROUP_ACTION_DELETE,
+    ):
+        failed.append(member)
+
+    failed.extend(send_group_key_shares(state, group_id))
+    if failed:
+        print("Membro removido e chave rodada, mas houve falhas ao notificar:", ", ".join(sorted(set(failed))))
+    else:
+        print(f"{member} removido de {group.get('name', group_id)}; group_key rodada para versão {group['group_key_version']}.")
+
+
+def cmd_leave_group(state, group_id):
+    sync_groups(state)
+
+    group = state.groups.get(group_id)
+    if group is None:
+        print(f"{group_id} não é um grupo conhecido.")
+        return
+
+    members = sorted(set(group.get("members", [])))
+    if state.username not in members:
+        print("Não pertences a esse grupo.")
+        return
+
+    group_info = {
+        "id": group_id,
+        "name": group.get("name", group_id),
+        "members": members,
+    }
+    failed = []
+    for member in sorted(user for user in members if user != state.username):
+        if not send_group_control_message(
+            state,
+            member,
+            group_info,
+            f"{state.username} saiu do grupo '{group_info['name']}'.",
+            GROUP_ACTION_LEAVE,
+        ):
+            failed.append(member)
+
+    removed_group = state.groups.pop(group_id)
+    state.groups_deleted.add(group_id)
+    state.groups_dirty = True
+    if not update_groups(state):
+        state.groups[group_id] = removed_group
+        state.groups_deleted.discard(group_id)
+        return
+
+    if state.active_conversation == group_id:
+        state.active_conversation = None
+
+    if failed:
+        print("Saíste do grupo localmente, mas houve falhas ao notificar:", ", ".join(failed))
+    else:
+        print(f"Saíste de {removed_group.get('name', group_id)}.")
+
+
 def cmd_send_group(state, group_id, text):
     if group_id not in state.groups:
         sync_groups(state)
@@ -769,6 +955,7 @@ def cmd_send_group(state, group_id, text):
         "group_id": group_id,
         "group_name": group.get("name", group_id),
         "group_members": group.get("members", []),
+        "group_key_version": normalize_group_key_version(group.get("group_key_version")),
     }
     save_to_history(state, local_envelope, text)
     print(f"Mensagem enviada para {sent} membro(s) do grupo.")

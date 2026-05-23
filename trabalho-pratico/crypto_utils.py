@@ -12,6 +12,7 @@ from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 E2EE_MESSAGE_VERSION = 2
 GROUP_KEY_SHARE_TYPE = "group_key_share"
 GROUP_MESSAGE_TYPE = "group_message"
+DEFAULT_GROUP_KEY_VERSION = 1
 
 
 def build_message_aad(message_id, sender, recipient, timestamp) -> bytes:
@@ -239,6 +240,7 @@ def encrypt_group_payload(group_key: str, payload: dict, aad: bytes | None = Non
     return {
         "nonce": base64.b64encode(nonce).decode(),
         "ciphertext": base64.b64encode(ciphertext).decode(),
+        "group_key_version": normalize_group_key_version(payload.get("group_key_version")) if isinstance(payload, dict) else DEFAULT_GROUP_KEY_VERSION,
     }
 
 
@@ -254,7 +256,7 @@ def decrypt_group_payload(group_key: str, nonce_b64: str, ciphertext_b64: str, a
 
 
 def group_message_signed_part(msg: dict):
-    return {
+    signed_part = {
         "type": GROUP_MESSAGE_TYPE,
         "group_id": msg["group_id"],
         "message_id": msg["message_id"],
@@ -264,6 +266,9 @@ def group_message_signed_part(msg: dict):
         "nonce": msg["nonce"],
         "ciphertext": msg["ciphertext"],
     }
+    if "group_key_version" in msg:
+        signed_part["group_key_version"] = msg["group_key_version"]
+    return signed_part
 
 
 # Assina dados com a chave privada do remetente.
@@ -346,6 +351,7 @@ def normalize_groups(groups):
         clean_group = {
             "name": clean_name,
             "members": clean_members,
+            "group_key_version": normalize_group_key_version(group.get("group_key_version")),
         }
         group_key = group.get("group_key")
         if is_valid_group_key(group_key):
@@ -354,6 +360,14 @@ def normalize_groups(groups):
         clean_groups[clean_group_id] = clean_group
 
     return dict(sorted(clean_groups.items()))
+
+
+def normalize_group_key_version(version) -> int:
+    if isinstance(version, bool):
+        return DEFAULT_GROUP_KEY_VERSION
+    if isinstance(version, int) and version >= DEFAULT_GROUP_KEY_VERSION:
+        return version
+    return DEFAULT_GROUP_KEY_VERSION
 
 
 def protected_contacts_signed_part(owner: str, payload: dict):

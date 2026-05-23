@@ -110,7 +110,7 @@ def is_valid_envelope(msg: dict) -> bool:
 # O conteúdo já vem cifrado do cliente; o servidor só persiste e encaminha.
 def build_envelope(msg: dict):
     if msg.get("type") == GROUP_MESSAGE_TYPE:
-        return {
+        envelope = {
             "type": GROUP_MESSAGE_TYPE,
             "group_id": msg["group_id"],
             "message_id": msg["message_id"],
@@ -121,6 +121,9 @@ def build_envelope(msg: dict):
             "ciphertext": msg["ciphertext"],
             "signature": msg["signature"],
         }
+        if "group_key_version" in msg:
+            envelope["group_key_version"] = msg["group_key_version"]
+        return envelope
 
     envelope = {
         "message_id": msg["message_id"],
