@@ -2,7 +2,7 @@ import socket
 import threading
 
 from chat_state import ChatState
-from chat_ui import print_main_help, run_ui_loop
+from chat_ui import run_ui_loop
 from client_connection import connect_to_server, send_request
 from client_worker import listener_loop
 from common.secure_channel import (
@@ -77,8 +77,8 @@ def main():
         state.stop_event.set()
     else:
         initialize_logged_in_client(state)
-        print(register_resp.get("message", "registo concluído"))
-        print_main_help()
+        print(f"\nLigado como {state.username}.")
+        print("Escreve `help` para ver os comandos.")
 
     try:
         run_ui_loop(state)

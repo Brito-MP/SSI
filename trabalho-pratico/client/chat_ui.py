@@ -22,26 +22,38 @@ def current_prompt(state):
 
 
 def print_main_help():
-    print("Comandos:")
-    print("  contacts")
-    print("  add_contact <user>")
-    print("  remove_contact <user>")
-    print("  groups")
-    print("  create_group \"<nome>\" <user1,user2,...>")
-    print("  remove_group <group_id>")
-    print("  remove_member <group_id> <user>")
-    print("  leave_group <group_id>")
-    print("  chats")
-    print("  open <user|group_id>")
-    print("  conversations")
-    print("  sync")
-    print("  send <user> <mensagem>  (fallback/debug)")
+    print("Comandos principais:")
+    print("  users                         listar utilizadores do servidor")
+    print("  contacts                      listar contactos")
+    print("  add <user>                    adicionar contacto")
+    print("  remove <user>                 remover contacto")
+    print("")
+    print("  chats                         listar conversas")
+    print("  open <user|group_id>          abrir conversa")
+    print("")
+    print("  groups                        listar grupos")
+    print("  help groups                   ajuda para comandos de grupo")
+    print("  files                         ajuda para comandos por ficheiro")
+    print("")
+    print("  sync                          sincronizar mensagens manualmente")
+    print("  help                          mostrar esta ajuda")
+    print("  exit                          sair")
+
+
+def print_group_help():
+    print("Comandos de grupo:")
+    print("  group_create \"<nome>\" user1,user2")
+    print("  group_remove <group_id>")
+    print("  group_kick <group_id> <user>")
+    print("  group_leave <group_id>")
+
+
+def print_files_help():
+    print("Comandos por ficheiro:")
     print("  export_bundle <ficheiro>")
     print("  import_bundle <ficheiro>")
     print("  export_msg <user> \"<mensagem>\" <ficheiro>")
     print("  import_msg <ficheiro>")
-    print("  help")
-    print("  exit")
 
 
 def print_conversation_help():
@@ -71,9 +83,40 @@ def cmd_list_users(state):
     print("Users:", resp.get("users", []))
 
 
+def is_command(cmd, name):
+    return cmd == name or cmd.startswith(f"{name} ")
+
+
+def command_arg(cmd, usage):
+    parts = cmd.split(" ", 1)
+    if len(parts) < 2 or not parts[1].strip():
+        print(usage)
+        return None
+    return parts[1].strip()
+
+
+def parse_group_create(cmd, usage):
+    try:
+        parts = shlex.split(cmd)
+    except ValueError:
+        print(usage)
+        return None
+
+    if len(parts) != 3 or not parts[1].strip() or not parts[2].strip():
+        print(usage)
+        return None
+
+    _, name, members_raw = parts
+    members = [member.strip() for member in members_raw.split(",")]
+    return name, members
+
+
 def run_ui_loop(state):
     while not state.stop_event.is_set():
-        cmd = input(current_prompt(state)).strip()
+        try:
+            cmd = input(current_prompt(state)).strip()
+        except EOFError:
+            break
         if not cmd:
             continue
 
@@ -96,59 +139,92 @@ def run_ui_loop(state):
         if cmd == "help":
             print_main_help()
 
+        elif cmd == "help groups":
+            print_group_help()
+
+        elif cmd == "files":
+            print_files_help()
+
+        elif cmd in {"users", "list"}:
+            cmd_list_users(state)
+
         elif cmd == "contacts":
             cmd_contacts(state)
 
         elif cmd == "groups":
             cmd_groups(state)
 
-        elif cmd == "chats":
-            cmd_contacts(state)
-            cmd_groups(state)
+        elif cmd in {"chats", "conversations"}:
+            cmd_conversations(state)
 
-        elif cmd == "add_contact" or cmd.startswith("add_contact "):
-            parts = cmd.split(" ", 1)
-            if len(parts) < 2 or not parts[1].strip():
-                print("Uso: add_contact <user>")
+        elif is_command(cmd, "add"):
+            target = command_arg(cmd, "Uso: add <user>")
+            if target is None:
                 continue
 
-            target = parts[1].strip()
             cmd_add_contact(state, target)
 
-        elif cmd == "remove_contact" or cmd.startswith("remove_contact "):
-            parts = cmd.split(" ", 1)
-            if len(parts) < 2 or not parts[1].strip():
-                print("Uso: remove_contact <user>")
+        elif is_command(cmd, "remove"):
+            target = command_arg(cmd, "Uso: remove <user>")
+            if target is None:
                 continue
 
-            target = parts[1].strip()
             cmd_remove_contact(state, target)
 
-        elif cmd == "create_group" or cmd.startswith("create_group "):
-            try:
-                parts = shlex.split(cmd)
-            except ValueError as exc:
-                print(f"Comando inválido: {exc}")
+        elif is_command(cmd, "add_contact"):
+            target = command_arg(cmd, "Uso: add_contact <user>")
+            if target is None:
                 continue
 
-            if len(parts) != 3 or not parts[1].strip() or not parts[2].strip():
-                print("Uso: create_group <nome> <user1,user2,...>")
+            cmd_add_contact(state, target)
+
+        elif is_command(cmd, "remove_contact"):
+            target = command_arg(cmd, "Uso: remove_contact <user>")
+            if target is None:
                 continue
 
-            _, name, members_raw = parts
-            members = [member.strip() for member in members_raw.split(",")]
+            cmd_remove_contact(state, target)
+
+        elif is_command(cmd, "group_create"):
+            parsed = parse_group_create(cmd, "Uso: group_create \"<nome>\" user1,user2")
+            if parsed is None:
+                continue
+
+            name, members = parsed
             cmd_create_group(state, name, members)
 
-        elif cmd == "remove_group" or cmd.startswith("remove_group "):
-            parts = cmd.split(" ", 1)
-            if len(parts) < 2 or not parts[1].strip():
-                print("Uso: remove_group <group_id>")
+        elif is_command(cmd, "create_group"):
+            parsed = parse_group_create(cmd, "Uso: create_group <nome> <user1,user2,...>")
+            if parsed is None:
                 continue
 
-            group_id = parts[1].strip()
+            name, members = parsed
+            cmd_create_group(state, name, members)
+
+        elif is_command(cmd, "group_remove"):
+            group_id = command_arg(cmd, "Uso: group_remove <group_id>")
+            if group_id is None:
+                continue
+
             cmd_remove_group(state, group_id)
 
-        elif cmd == "remove_member" or cmd.startswith("remove_member "):
+        elif is_command(cmd, "remove_group"):
+            group_id = command_arg(cmd, "Uso: remove_group <group_id>")
+            if group_id is None:
+                continue
+
+            cmd_remove_group(state, group_id)
+
+        elif is_command(cmd, "group_kick"):
+            parts = cmd.split(" ", 2)
+            if len(parts) != 3 or not parts[1].strip() or not parts[2].strip():
+                print("Uso: group_kick <group_id> <user>")
+                continue
+
+            _, group_id, member = parts
+            cmd_remove_group_member(state, group_id, member)
+
+        elif is_command(cmd, "remove_member"):
             parts = cmd.split(" ", 2)
             if len(parts) != 3 or not parts[1].strip() or not parts[2].strip():
                 print("Uso: remove_member <group_id> <user>")
@@ -157,19 +233,21 @@ def run_ui_loop(state):
             _, group_id, member = parts
             cmd_remove_group_member(state, group_id, member)
 
-        elif cmd == "leave_group" or cmd.startswith("leave_group "):
-            parts = cmd.split(" ", 1)
-            if len(parts) < 2 or not parts[1].strip():
-                print("Uso: leave_group <group_id>")
+        elif is_command(cmd, "group_leave"):
+            group_id = command_arg(cmd, "Uso: group_leave <group_id>")
+            if group_id is None:
                 continue
 
-            group_id = parts[1].strip()
             cmd_leave_group(state, group_id)
 
-        elif cmd == "list":
-            cmd_list_users(state)
+        elif is_command(cmd, "leave_group"):
+            group_id = command_arg(cmd, "Uso: leave_group <group_id>")
+            if group_id is None:
+                continue
 
-        elif cmd == "send" or cmd.startswith("send "):
+            cmd_leave_group(state, group_id)
+
+        elif is_command(cmd, "send"):
             parts = cmd.split(" ", 2)
             if len(parts) < 3:
                 print("Uso: send <user> <mensagem>")
@@ -180,7 +258,7 @@ def run_ui_loop(state):
         elif cmd == "sync" or cmd == "inbox":
             cmd_sync(state)
 
-        elif cmd == "export_bundle" or cmd.startswith("export_bundle "):
+        elif is_command(cmd, "export_bundle"):
             try:
                 parts = shlex.split(cmd)
             except ValueError as exc:
@@ -191,7 +269,7 @@ def run_ui_loop(state):
                 continue
             cmd_export_bundle(state, parts[1])
 
-        elif cmd == "import_bundle" or cmd.startswith("import_bundle "):
+        elif is_command(cmd, "import_bundle"):
             try:
                 parts = shlex.split(cmd)
             except ValueError as exc:
@@ -202,7 +280,7 @@ def run_ui_loop(state):
                 continue
             cmd_import_bundle(state, parts[1])
 
-        elif cmd == "export_msg" or cmd.startswith("export_msg "):
+        elif is_command(cmd, "export_msg"):
             try:
                 parts = shlex.split(cmd)
             except ValueError as exc:
@@ -214,7 +292,7 @@ def run_ui_loop(state):
             _, target, text, path = parts
             cmd_export_msg(state, target, text, path)
 
-        elif cmd == "import_msg" or cmd.startswith("import_msg "):
+        elif is_command(cmd, "import_msg"):
             try:
                 parts = shlex.split(cmd)
             except ValueError as exc:
@@ -225,18 +303,16 @@ def run_ui_loop(state):
                 continue
             cmd_import_msg(state, parts[1])
 
-        elif cmd == "conversations":
-            cmd_conversations(state)
-
-        elif cmd == "open" or cmd.startswith("open "):
-            parts = cmd.split(" ", 1)
-            if len(parts) < 2 or not parts[1].strip():
-                print("Uso: open <user>")
+        elif is_command(cmd, "open"):
+            target = command_arg(cmd, "Uso: open <user|group_id>")
+            if target is None:
                 continue
-            target = parts[1].strip()
 
-            if target not in state.contacts and target not in state.groups:
-                print(f"{target} não é contacto nem grupo conhecido.")
+            with state.conversations_lock:
+                has_conversation = target in state.conversations
+
+            if not has_conversation and target not in state.contacts and target not in state.groups:
+                print("Não encontrei essa conversa. Usa `contacts`, `groups` ou `add <user>`.")
                 continue
 
             if cmd_open(state, target):
@@ -247,4 +323,4 @@ def run_ui_loop(state):
             break
 
         else:
-            print("Comando desconhecido. Usa help.")
+            print("Comando desconhecido. Escreve `help` para ver os comandos.")
