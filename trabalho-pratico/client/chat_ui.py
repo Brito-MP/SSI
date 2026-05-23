@@ -3,6 +3,7 @@ import shlex
 from client_connection import send_request
 from handlers.contact_handler import cmd_add_contact, cmd_contacts, cmd_remove_contact
 from handlers.conversation_handler import cmd_conversations, cmd_open
+from handlers.file_handler import cmd_export_bundle, cmd_export_msg, cmd_import_bundle, cmd_import_msg
 from handlers.message_handler import cmd_create_group, cmd_groups, cmd_remove_group, cmd_send, cmd_sync
 
 
@@ -25,6 +26,10 @@ def print_main_help():
     print("  conversations")
     print("  sync")
     print("  send <user> <mensagem>  (fallback/debug)")
+    print("  export_bundle <ficheiro>")
+    print("  import_bundle <ficheiro>")
+    print("  export_msg <user> \"<mensagem>\" <ficheiro>")
+    print("  import_msg <ficheiro>")
     print("  help")
     print("  exit")
 
@@ -146,6 +151,51 @@ def run_ui_loop(state):
 
         elif cmd == "sync" or cmd == "inbox":
             cmd_sync(state)
+
+        elif cmd == "export_bundle" or cmd.startswith("export_bundle "):
+            try:
+                parts = shlex.split(cmd)
+            except ValueError as exc:
+                print(f"Comando inválido: {exc}")
+                continue
+            if len(parts) != 2:
+                print("Uso: export_bundle <ficheiro>")
+                continue
+            cmd_export_bundle(state, parts[1])
+
+        elif cmd == "import_bundle" or cmd.startswith("import_bundle "):
+            try:
+                parts = shlex.split(cmd)
+            except ValueError as exc:
+                print(f"Comando inválido: {exc}")
+                continue
+            if len(parts) != 2:
+                print("Uso: import_bundle <ficheiro>")
+                continue
+            cmd_import_bundle(state, parts[1])
+
+        elif cmd == "export_msg" or cmd.startswith("export_msg "):
+            try:
+                parts = shlex.split(cmd)
+            except ValueError as exc:
+                print(f"Comando inválido: {exc}")
+                continue
+            if len(parts) != 4:
+                print("Uso: export_msg <user> \"<mensagem>\" <ficheiro>")
+                continue
+            _, target, text, path = parts
+            cmd_export_msg(state, target, text, path)
+
+        elif cmd == "import_msg" or cmd.startswith("import_msg "):
+            try:
+                parts = shlex.split(cmd)
+            except ValueError as exc:
+                print(f"Comando inválido: {exc}")
+                continue
+            if len(parts) != 2:
+                print("Uso: import_msg <ficheiro>")
+                continue
+            cmd_import_msg(state, parts[1])
 
         elif cmd == "conversations":
             cmd_conversations(state)

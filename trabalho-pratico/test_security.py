@@ -28,6 +28,14 @@ from common.security import client_username_from_certificate, sign_dh_keys, vali
 from common.crypto import encrypt_message, decrypt_message
 from chat_state import ChatState
 from handlers.conversation_handler import save_to_history
+from handlers.file_handler import (
+    build_public_bundle,
+    cmd_export_bundle,
+    cmd_export_msg,
+    cmd_import_bundle,
+    cmd_import_msg,
+    import_public_bundle,
+)
 from handlers.message_handler import (
     build_group_message_envelope,
     build_group_message_payload,
@@ -87,6 +95,21 @@ def make_chat_state():
         x25519_private_key=None,
         x25519_public_key=None,
     )
+
+
+def make_user_state(username):
+    identity_priv, identity_pub = generate_rsa_keypair()
+    x25519_priv, x25519_pub = generate_x25519_keypair()
+    state = ChatState(
+        username=username,
+        private_key=identity_priv,
+        public_key=identity_pub,
+        x25519_private_key=x25519_priv,
+        x25519_public_key=x25519_pub,
+    )
+    state.key_cache[username] = identity_pub
+    state.e2ee_key_cache[username] = x25519_pub
+    return state
 
 
 def history_message(message_id=None, sender="bob", target="alice"):
@@ -733,6 +756,173 @@ def test_message_aad_rejects_ciphertext_tampering():
     print("OK - ciphertext adulterado falha")
 
 
+def test_export_bundle_creates_public_json():
+    print("\n[TESTE] export_bundle cria JSON público")
+
+    alice = make_user_state("alice")
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        bundle_path = os.path.join(tmp_dir, "alice-bundle.json")
+        assert cmd_export_bundle(alice, bundle_path)
+
+        with open(bundle_path, "r", encoding="utf-8") as f:
+            bundle = json.load(f)
+
+    serialized = json.dumps(bundle)
+    assert bundle["type"] == "ssi_bundle"
+    assert bundle["version"] == 1
+    assert bundle["username"] == "alice"
+    assert "identity_key" in bundle["public_keys"]
+    assert "e2ee_key" in bundle["public_keys"]
+    assert "PRIVATE KEY" not in serialized
+    assert "group_key" not in serialized
+    assert "password" not in serialized.lower()
+
+    print("OK - bundle contém só material público")
+
+
+def test_import_bundle_imports_public_keys():
+    print("\n[TESTE] import_bundle importa chaves públicas")
+
+    alice = make_user_state("alice")
+    bob = make_user_state("bob")
+    bundle = build_public_bundle(alice)
+
+    imported_username = import_public_bundle(bob, bundle)
+
+    assert imported_username == "alice"
+    assert "alice" in bob.contacts
+    assert public_key_to_pem(bob.key_cache["alice"]) == public_key_to_pem(alice.public_key)
+    assert public_key_to_pem(bob.e2ee_key_cache["alice"]) == public_key_to_pem(alice.x25519_public_key)
+
+    print("OK - bundle importado para cache local")
+
+
+def test_import_bundle_rejects_invalid_json():
+    print("\n[TESTE] import_bundle rejeita JSON inválido")
+
+    bob = make_user_state("bob")
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        bundle_path = os.path.join(tmp_dir, "bad-bundle.json")
+        with open(bundle_path, "w", encoding="utf-8") as f:
+            f.write("{invalid")
+
+        assert not cmd_import_bundle(bob, bundle_path)
+        assert "alice" not in bob.key_cache
+
+    print("OK - JSON inválido rejeitado")
+
+
+def test_import_bundle_rejects_missing_fields():
+    print("\n[TESTE] import_bundle rejeita campos obrigatórios em falta")
+
+    bob = make_user_state("bob")
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        bundle_path = os.path.join(tmp_dir, "incomplete-bundle.json")
+        with open(bundle_path, "w", encoding="utf-8") as f:
+            json.dump({"type": "ssi_bundle", "version": 1, "username": "alice"}, f)
+
+        assert not cmd_import_bundle(bob, bundle_path)
+        assert "alice" not in bob.key_cache
+
+    print("OK - bundle incompleto rejeitado")
+
+
+def test_export_import_message_file_roundtrip():
+    print("\n[TESTE] export_msg/import_msg cifra e decifra por ficheiro")
+
+    alice = make_user_state("alice")
+    bob = make_user_state("bob")
+    import_public_bundle(alice, build_public_bundle(bob))
+    import_public_bundle(bob, build_public_bundle(alice))
+
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        msg_path = os.path.join(tmp_dir, "msg.json")
+        assert cmd_export_msg(alice, "bob", "segredo por ficheiro", msg_path)
+
+        with open(msg_path, "r", encoding="utf-8") as f:
+            exported = json.load(f)
+        serialized = json.dumps(exported, ensure_ascii=False)
+
+        assert exported["type"] == "ssi_message"
+        assert exported["version"] == 1
+        assert exported["algorithm"] == "ssi-e2ee-v2-aes-256-gcm-aad"
+        assert "segredo por ficheiro" not in serialized
+        assert cmd_import_msg(bob, msg_path)
+
+    assert bob.conversations["alice"][0]["text"] == "segredo por ficheiro"
+
+    print("OK - mensagem por ficheiro decifrada")
+
+
+def test_import_msg_rejects_wrong_recipient():
+    print("\n[TESTE] import_msg rejeita destinatário errado")
+
+    alice = make_user_state("alice")
+    bob = make_user_state("bob")
+    charlie = make_user_state("charlie")
+    import_public_bundle(alice, build_public_bundle(bob))
+    import_public_bundle(charlie, build_public_bundle(alice))
+
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        msg_path = os.path.join(tmp_dir, "msg.json")
+        assert cmd_export_msg(alice, "bob", "não é para charlie", msg_path)
+        assert not cmd_import_msg(charlie, msg_path)
+
+    assert charlie.conversations == {}
+
+    print("OK - destinatário errado rejeitado")
+
+
+def test_import_msg_rejects_ciphertext_tampering():
+    print("\n[TESTE] import_msg rejeita ciphertext adulterado")
+
+    alice = make_user_state("alice")
+    bob = make_user_state("bob")
+    import_public_bundle(alice, build_public_bundle(bob))
+    import_public_bundle(bob, build_public_bundle(alice))
+
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        msg_path = os.path.join(tmp_dir, "msg.json")
+        assert cmd_export_msg(alice, "bob", "mensagem íntegra", msg_path)
+        with open(msg_path, "r", encoding="utf-8") as f:
+            exported = json.load(f)
+        ciphertext = bytearray(base64.b64decode(exported["envelope"]["payload"]["ciphertext"]))
+        ciphertext[0] ^= 1
+        exported["envelope"]["payload"]["ciphertext"] = base64.b64encode(ciphertext).decode()
+        with open(msg_path, "w", encoding="utf-8") as f:
+            json.dump(exported, f)
+
+        assert not cmd_import_msg(bob, msg_path)
+
+    assert bob.conversations == {}
+
+    print("OK - ciphertext adulterado rejeitado")
+
+
+def test_import_msg_rejects_aad_metadata_tampering():
+    print("\n[TESTE] import_msg rejeita metadados autenticados adulterados")
+
+    alice = make_user_state("alice")
+    bob = make_user_state("bob")
+    import_public_bundle(alice, build_public_bundle(bob))
+    import_public_bundle(bob, build_public_bundle(alice))
+
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        msg_path = os.path.join(tmp_dir, "msg.json")
+        assert cmd_export_msg(alice, "bob", "mensagem com AAD", msg_path)
+        with open(msg_path, "r", encoding="utf-8") as f:
+            exported = json.load(f)
+        exported["envelope"]["timestamp"] = "2026-05-23T00:00:00Z"
+        with open(msg_path, "w", encoding="utf-8") as f:
+            json.dump(exported, f)
+
+        assert not cmd_import_msg(bob, msg_path)
+
+    assert bob.conversations == {}
+
+    print("OK - metadados AAD adulterados rejeitados")
+
+
 def test_group_message_duplicate_is_ignored():
     print("\n[TESTE] Mensagem de grupo duplicada é ignorada")
 
@@ -1082,6 +1272,14 @@ def run_all():
     test_message_aad_correct_metadata_decrypts()
     test_message_aad_rejects_metadata_tampering()
     test_message_aad_rejects_ciphertext_tampering()
+    test_export_bundle_creates_public_json()
+    test_import_bundle_imports_public_keys()
+    test_import_bundle_rejects_invalid_json()
+    test_import_bundle_rejects_missing_fields()
+    test_export_import_message_file_roundtrip()
+    test_import_msg_rejects_wrong_recipient()
+    test_import_msg_rejects_ciphertext_tampering()
+    test_import_msg_rejects_aad_metadata_tampering()
     test_group_message_duplicate_is_ignored()
     test_offline_sync_delivers_group_message_envelope()
     test_concurrent_user_updates_keep_valid_json()
