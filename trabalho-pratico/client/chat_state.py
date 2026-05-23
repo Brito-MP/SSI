@@ -71,6 +71,10 @@ class ChatState:
     contacts: set = field(default_factory=set)
     active_conversation: str | None = None
     imported_bundles_path: str | None = None
+    prekeys_path: str | None = None
+    online_sessions: dict = field(default_factory=dict)
+    pending_online_sessions: dict = field(default_factory=dict)
+    online_sessions_lock: threading.Lock = field(default_factory=threading.Lock)
 
     def has_seen_message(self, message_id):
         if not isinstance(message_id, str) or not message_id:

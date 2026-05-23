@@ -12,7 +12,15 @@ from common.secure_channel import (
 )
 from crypto_utils import e2ee_public_key_binding_bytes, public_key_to_pem, sign_message
 from handlers.contact_handler import sync_contacts
-from handlers.message_handler import sync_groups, update_groups
+from handlers.message_handler import sync_groups, sync_pending_messages, update_groups
+from handlers.prekey_handler import publish_signed_prekeys
+
+
+def initialize_logged_in_client(state):
+    publish_signed_prekeys(state)
+    sync_contacts(state)
+    sync_groups(state)
+    sync_pending_messages(state, announce=True)
 
 
 def main():
@@ -68,8 +76,7 @@ def main():
         print(register_resp.get("message", "erro no registo"))
         state.stop_event.set()
     else:
-        sync_contacts(state)
-        sync_groups(state)
+        initialize_logged_in_client(state)
         print(register_resp.get("message", "registo concluído"))
         print_main_help()
 
@@ -80,6 +87,9 @@ def main():
     finally:
         if state.groups_dirty and not state.stop_event.is_set():
             update_groups(state)
+        with state.online_sessions_lock:
+            state.online_sessions.clear()
+            state.pending_online_sessions.clear()
         state.stop_event.set()
         try:
             state.sock.shutdown(socket.SHUT_RDWR)
