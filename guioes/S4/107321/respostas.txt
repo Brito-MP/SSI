@@ -1,0 +1,61 @@
+
+1. Capability leaking
+
+O programa backupssi é executado com setuid root. Por isso, quando faz open("/root", O_RDONLY), consegue abrir uma diretoria que um utilizador normal não conseguiria abrir.
+
+O problema é que esse descritor fica aberto. Depois o programa faz setuid(getuid()) para voltar ao utilizador normal, mas não fecha o descritor antes de executar /bin/sh. A shell herda esse acesso já aberto.
+
+Para testar:
+
+gcc -o backupssi backupssi.c
+gcc -o listar_fd listar_fd.c
+sudo chown root:root backupssi
+sudo chmod 4755 backupssi
+./backupssi
+
+Na shell aberta pelo programa, usar o fd mostrado no output:
+
+./listar_fd 3
+
+Se o fd for outro número, substituir o 3 pelo valor impresso.
+
+Correção: em backupssi_corrigido.c foi usado close(dfd) antes de lançar a shell. Assim a shell já não herda o acesso a /root.
+
+Compilação da versão corrigida:
+
+gcc -o backupssi_corrigido backupssi_corrigido.c
+sudo chown root:root backupssi_corrigido
+sudo chmod 4755 backupssi_corrigido
+./backupssi_corrigido
+
+
+2. Elevação de privilégio
+
+O segundo programa tem o mesmo tipo de erro, mas mais grave: abre /etc/passwd em modo escrita enquanto ainda corre com privilégios de root.
+
+Depois baixa os privilégios com setuid(getuid()), mas deixa o fd aberto. A shell fica como utilizador normal, mas mantém um descritor com permissão de escrita no ficheiro /etc/passwd.
+
+Para testar em VM:
+
+gcc -o passwdleak passwdleak.c
+sudo chown root:root passwdleak
+sudo chmod 4755 passwdleak
+./passwdleak
+
+Na shell aberta pelo programa, se o fd impresso for 3:
+
+echo 'ssihacker::0:0::/root:/bin/sh' >&3
+su ssihacker
+
+Isto cria uma conta com UID 0. Na prática, essa conta fica equivalente ao root, podendo ler e alterar ficheiros protegidos, gerir utilizadores e controlar o sistema.
+
+Correção: em passwdleak_corrigido.c foi usado close(fd) antes de abrir a shell. Dessa forma o descritor de escrita para /etc/passwd não passa para a shell.
+
+Compilação da versão corrigida:
+
+gcc -o passwdleak_corrigido passwdleak_corrigido.c
+sudo chown root:root passwdleak_corrigido
+sudo chmod 4755 passwdleak_corrigido
+./passwdleak_corrigido
+
+Nota: estes testes devem ser feitos só numa VM/ambiente descartável, porque mexem em ficheiros críticos do sistema.
