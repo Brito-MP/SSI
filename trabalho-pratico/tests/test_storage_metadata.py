@@ -78,6 +78,24 @@ def test_concurrent_message_storage_keeps_valid_json():
     print("OK - messages.json final válido e completo")
 
 
+def test_online_user_reservation_rejects_duplicate_session():
+    print("\n[TESTE] Servidor rejeita segunda sessão ativa do mesmo utilizador")
+
+    first_socket = FakeSocket()
+    second_socket = FakeSocket()
+
+    clear_online_users()
+    try:
+        assert reserve_online_user("goncalo", first_socket) is True
+        assert reserve_online_user("goncalo", first_socket) is True
+        assert reserve_online_user("goncalo", second_socket) is False
+        assert online_users["goncalo"] is first_socket
+    finally:
+        clear_online_users()
+
+    print("OK - segunda sessão não substitui a primeira")
+
+
 
 def test_contacts_metadata_normalization():
     print("\n[TESTE] Normalização de contactos")
@@ -260,6 +278,7 @@ def test_incoming_message_without_id_is_ignored_without_crash():
 TESTS = [
     test_concurrent_user_updates_keep_valid_json,
     test_concurrent_message_storage_keeps_valid_json,
+    test_online_user_reservation_rejects_duplicate_session,
     test_contacts_metadata_normalization,
     test_protected_contacts_roundtrip,
     test_groups_metadata_normalization,
