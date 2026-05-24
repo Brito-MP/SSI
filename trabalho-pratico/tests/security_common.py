@@ -115,6 +115,7 @@ from server.server import (
     pop_available_signed_prekey,
     publish_signed_prekeys_for_user,
 )
+from server.server_state import reserve_online_user
 from client_start import initialize_logged_in_client
 from tools.issue_client_cert import issue_client_certificate
 

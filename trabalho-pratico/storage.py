@@ -23,6 +23,7 @@ def users_lock():
 def messages_lock():
     with _MESSAGES_LOCK:
         yield
+        
 
 
 def _load_json(path, default):
