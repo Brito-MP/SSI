@@ -1,0 +1,33 @@
+E2EE_MESSAGE_VERSION = 2
+
+GROUP_KEY_SHARE_TYPE = "group_key_share"
+
+GROUP_MESSAGE_TYPE = "group_message"
+
+DEFAULT_GROUP_KEY_VERSION = 1
+
+SIGNED_PREKEY_TYPE = "signed_prekey"
+
+SIGNED_PREKEY_VERSION = 1
+
+SIGNED_PREKEY_ALGORITHM = "X25519"
+
+OFFLINE_PREKEY_MESSAGE_TYPE = "offline_prekey_message"
+
+OFFLINE_PREKEY_MESSAGE_VERSION = 1
+
+OFFLINE_PREKEY_MESSAGE_ALGORITHM = "x25519-signed-prekey-hkdf-sha256-aes-256-gcm"
+
+OFFLINE_PREKEY_HKDF_INFO = b"SSI offline signed prekey message v1"
+
+SESSION_INIT_TYPE = "session_init"
+
+SESSION_RESPONSE_TYPE = "session_response"
+
+ONLINE_SESSION_MESSAGE_TYPE = "online_session_message"
+
+ONLINE_SESSION_MESSAGE_VERSION = 1
+
+ONLINE_SESSION_MESSAGE_ALGORITHM = "x25519-ephemeral-session-hkdf-sha256-aes-256-gcm"
+
+ONLINE_SESSION_HKDF_INFO = b"SSI online ephemeral session v1"
