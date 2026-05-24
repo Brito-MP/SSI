@@ -12,7 +12,7 @@ from server.contact_group_store import (
 from server.message_store import ack_pending_messages, deliver_or_store_message, enrich_with_sender_keys, get_pending_messages
 from server.prekey_store import pop_available_signed_prekey, publish_signed_prekeys_for_user
 from server.server_common import E2EE_PUBLIC_KEY_FIELD, E2EE_PUBLIC_KEY_SIGNATURE_FIELD, ONLINE_ONLY_MESSAGE_TYPES, SIGNED_PREKEYS_FIELD
-from server.server_state import is_user_online, set_online_user
+from server.server_state import is_user_online, reserve_online_user
 from server.user_store import can_set_e2ee_public_key, canonical_public_key_pem, registered_user
 from server.validators import is_valid_envelope
 from storage import (
@@ -114,7 +114,13 @@ def handle_register(conn, msg, authenticated_username, authenticated_public_key,
         user_data.pop("groups", None)
         users[username] = user_data
         save_users(users)
-    set_online_user(username, conn)
+    if not reserve_online_user(username, conn):
+        send_json(conn, {
+            "status": "error",
+            "message": "utilizador já tem uma sessão ativa",
+        })
+        return None
+
     send_json(conn, {"status": "ok", "message": f"user '{username}' registado"})
     return username
 
