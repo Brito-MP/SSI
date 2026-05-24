@@ -37,7 +37,7 @@ A solução utiliza a biblioteca `cryptography` e combina várias primitivas cri
 
 ## Arquitetura
 
-<img src="images/arquitetura_chat.png" alt="Arquitetura geral do sistema de chat seguro" width="650" />
+<img src="images/arquitetura.png" alt="Arquitetura geral do sistema de chat seguro" width="650" />
 
 A arquitetura do sistema é composta por três entidades principais: clientes, servidor e autoridade certificadora local. Cada utilizador executa uma instância do cliente, que é responsável pela interface textual, gestão local de chaves, cifragem e decifragem das mensagens, validação de assinaturas, gestão de contactos e processamento de grupos.
 
@@ -79,7 +79,7 @@ A chave privada RSA e a chave privada X25519 ficam guardadas localmente no clien
 
 ### Handshake Autenticado
 
-<img src="images/handshake_cliente_servidor.png" alt="Handshake autenticado entre cliente e servidor" width="600" />
+<img src="images/handshake.png" alt="Handshake autenticado entre cliente e servidor" width="600" />
 
 Antes de qualquer comando aplicacional, cliente e servidor estabelecem um canal seguro. Este canal não substitui a E2EE entre clientes, mas protege a ligação de transporte contra ataques de rede, como escuta, modificação de mensagens ou man-in-the-middle.
 
