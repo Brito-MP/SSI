@@ -163,7 +163,6 @@ Cada envelope de mensagem é assinado com a chave privada RSA de identidade do r
 
 ### Mensagens Offline com Signed Prekeys
 
-<img src="images/fluxo_e2ee_offline.png" alt="Fluxo de mensagem E2EE com entrega online e armazenamento offline" width="650" />
 
 Uma das valorizações implementadas é o suporte a mensagens offline. Quando um destinatário não está ligado, o servidor guarda a mensagem cifrada e entrega-a quando o destinatário voltar a fazer sincronização.
 
