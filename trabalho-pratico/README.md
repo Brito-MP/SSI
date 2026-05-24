@@ -62,6 +62,8 @@ Esta separação permite distinguir claramente a lógica de comunicação, a ló
 
 Cada interveniente do sistema possui uma identidade criptográfica baseada em certificados X.509 assinados por uma Autoridade Certificadora local. A CA local funciona como raiz de confiança do sistema. O servidor tem um certificado próprio, e cada cliente tem um certificado associado ao seu username.
 
+<img src="images/diagrama.png" alt="Processo de emissão de certificados de cliente" width="650" />
+
 No caso dos clientes, o certificado vincula o username à chave pública RSA de identidade. Durante o registo, o servidor não aceita simplesmente o username indicado pelo cliente: o username enviado no comando de registo tem de corresponder ao username extraído do certificado autenticado no handshake. Além disso, a chave pública RSA enviada pelo cliente tem de corresponder à chave pública presente no certificado.
 
 Cada cliente mantém também uma chave E2EE X25519. Esta chave é usada como chave pública estática para receber mensagens no formato E2EE v2. Para impedir substituições maliciosas, a chave pública E2EE é assinada com a chave privada RSA de identidade do próprio utilizador. Assim, quando outro cliente recebe essa chave pública, consegue verificar que ela pertence ao utilizador autenticado.
