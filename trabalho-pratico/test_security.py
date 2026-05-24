@@ -111,12 +111,13 @@ from crypto_utils import (
 from server.server import (
     SIGNED_PREKEYS_FIELD,
     can_set_e2ee_public_key,
+    ack_pending_messages,
     deliver_or_store_message,
+    get_pending_messages,
     is_valid_envelope,
     online_users,
     online_users_lock,
     pop_available_signed_prekey,
-    pop_pending_messages,
     publish_signed_prekeys_for_user,
 )
 from client_start import initialize_logged_in_client
@@ -1156,7 +1157,7 @@ def test_server_forwards_online_session_envelopes_without_offline_storage():
         forwarded = json.loads(bob_socket.sent[-1].decode("utf-8"))
         assert forwarded["command"] == "deliver_message"
         assert forwarded["type"] == SESSION_INIT_TYPE
-        assert pop_pending_messages("bob") == []
+        assert get_pending_messages("bob") == []
 
     response = build_session_handshake_envelope(
         SESSION_RESPONSE_TYPE,
@@ -1180,7 +1181,7 @@ def test_server_forwards_online_session_envelopes_without_offline_storage():
         forwarded = json.loads(alice_socket.sent[-1].decode("utf-8"))
         assert forwarded["command"] == "deliver_message"
         assert forwarded["type"] == SESSION_RESPONSE_TYPE
-        assert pop_pending_messages("alice") == []
+        assert get_pending_messages("alice") == []
 
     store_online_session(
         alice,
@@ -1200,7 +1201,7 @@ def test_server_forwards_online_session_envelopes_without_offline_storage():
         assert envelope["type"] == ONLINE_SESSION_MESSAGE_TYPE
         assert delivered_online is False
         assert stored_encrypted is False
-        assert pop_pending_messages("bob") == []
+        assert get_pending_messages("bob") == []
 
     print("OK - session_init é online-only e online_session_message não vira offline")
 
@@ -1285,10 +1286,138 @@ def test_server_fetch_after_online_delivery_is_empty():
 
         deliver_or_store_message(server_message("online-sync-1"), server_users())
 
-        assert pop_pending_messages("bob") == []
+        assert get_pending_messages("bob") == []
         assert storage.load_messages() == []
 
     print("OK - sync pós-entrega online vazio")
+
+
+def test_fetch_pending_messages_does_not_remove_from_storage():
+    print("\n[TESTE] fetch de pendentes não remove mensagens")
+
+    with temporary_messages_file():
+        bob_msg = server_message("bob-pending", target="bob")
+        alice_msg = server_message("alice-pending", target="alice")
+        storage.save_messages([bob_msg, alice_msg])
+
+        pending = get_pending_messages("bob")
+
+        assert [msg["message_id"] for msg in pending] == ["bob-pending"]
+        assert storage.load_messages() == [bob_msg, alice_msg]
+
+    print("OK - mensagens ficam pendentes até ACK")
+
+
+def test_ack_pending_messages_removes_only_confirmed_user_messages():
+    print("\n[TESTE] ACK remove só mensagens confirmadas do utilizador")
+
+    with temporary_messages_file():
+        bob_remove = server_message("remove-me", target="bob")
+        bob_keep = server_message("keep-me", target="bob")
+        alice_same_id = server_message("remove-me", target="alice")
+        storage.save_messages([bob_remove, bob_keep, alice_same_id])
+
+        removed = ack_pending_messages("bob", ["remove-me"])
+
+        assert removed == 1
+        assert storage.load_messages() == [bob_keep, alice_same_id]
+
+    print("OK - ACK não remove mensagens de outros utilizadores")
+
+
+def test_sync_successfully_processed_messages_are_acked_and_removed():
+    print("\n[TESTE] Sync envia ACK após processar mensagem com sucesso")
+
+    alice = make_user_state("alice")
+    bob = make_user_state("bob")
+    bob.key_cache["alice"] = alice.public_key
+    envelope = build_message_envelope(
+        "alice",
+        "bob",
+        "mensagem confirmada",
+        alice.private_key,
+        {
+            "identity_public_key": bob.public_key,
+            "e2ee_public_key": bob.x25519_public_key,
+        },
+    )
+
+    with temporary_messages_file():
+        storage.save_messages([envelope])
+        ack_payloads = []
+        globals_ = sync_pending_messages.__globals__
+        original_send_request = globals_["send_request"]
+
+        def fake_send_request(sock, response_queue, stop_event, payload):
+            if payload["command"] == "fetch_messages":
+                return {"status": "ok", "messages": get_pending_messages(payload["username"])}
+            if payload["command"] == "ack_messages":
+                ack_payloads.append(payload)
+                return {
+                    "status": "ok",
+                    "removed_count": ack_pending_messages(payload["username"], payload["message_ids"]),
+                }
+            raise AssertionError(f"comando inesperado: {payload['command']}")
+
+        try:
+            globals_["send_request"] = fake_send_request
+            assert sync_pending_messages(bob, show_summary=False) == 1
+        finally:
+            globals_["send_request"] = original_send_request
+
+        assert bob.conversations["alice"][0]["text"] == "mensagem confirmada"
+        assert ack_payloads == [{
+            "command": "ack_messages",
+            "username": "bob",
+            "message_ids": [envelope["message_id"]],
+        }]
+        assert storage.load_messages() == []
+
+    print("OK - mensagem processada saiu da fila por ACK")
+
+
+def test_sync_failed_processing_does_not_ack_or_remove_message():
+    print("\n[TESTE] Sync não ACKa mensagem que falha processamento")
+
+    alice = make_user_state("alice")
+    bob = make_user_state("bob")
+    bob.key_cache["alice"] = alice.public_key
+    broken_envelope = {
+        "message_id": "broken-offline",
+        "timestamp": "2026-05-22T18:00:00Z",
+        "from": "alice",
+        "to": "bob",
+        "payload": {"nonce": "bad", "ciphertext": "bad", "encrypted_key": "bad"},
+        "signature": "assinatura-invalida",
+    }
+
+    with temporary_messages_file():
+        storage.save_messages([broken_envelope])
+        ack_payloads = []
+        globals_ = sync_pending_messages.__globals__
+        original_send_request = globals_["send_request"]
+
+        def fake_send_request(sock, response_queue, stop_event, payload):
+            if payload["command"] == "fetch_messages":
+                return {"status": "ok", "messages": get_pending_messages(payload["username"])}
+            if payload["command"] == "ack_messages":
+                ack_payloads.append(payload)
+                return {
+                    "status": "ok",
+                    "removed_count": ack_pending_messages(payload["username"], payload["message_ids"]),
+                }
+            raise AssertionError(f"comando inesperado: {payload['command']}")
+
+        try:
+            globals_["send_request"] = fake_send_request
+            assert sync_pending_messages(bob, show_summary=False) == 0
+        finally:
+            globals_["send_request"] = original_send_request
+
+        assert ack_payloads == []
+        assert storage.load_messages() == [broken_envelope]
+
+    print("OK - mensagem com falha continua pendente no servidor")
 
 
 def test_login_initialization_calls_auto_sync_after_setup():
@@ -2227,10 +2356,11 @@ def test_offline_sync_delivers_group_message_envelope():
 
     with temporary_messages_file():
         deliver_or_store_message(envelope, server_users())
-        pending = pop_pending_messages("bob")
+        pending = get_pending_messages("bob")
 
         assert len(pending) == 1
         assert pending[0]["message_id"] == "group-offline"
+        assert len(storage.load_messages()) == 1
 
         state = ChatState(
             username="bob",
@@ -2245,6 +2375,7 @@ def test_offline_sync_delivers_group_message_envelope():
 
         assert len(state.conversations["group-equipa"]) == 1
         assert state.conversations["group-equipa"][0]["text"] == "olá grupo"
+        assert ack_pending_messages("bob", ["group-offline"]) == 1
         assert storage.load_messages() == []
 
     print("OK - grupo offline chega pelo sync")
@@ -2805,6 +2936,10 @@ def run_all():
     test_server_stores_message_when_recipient_offline()
     test_server_delivers_online_without_storing_pending()
     test_server_fetch_after_online_delivery_is_empty()
+    test_fetch_pending_messages_does_not_remove_from_storage()
+    test_ack_pending_messages_removes_only_confirmed_user_messages()
+    test_sync_successfully_processed_messages_are_acked_and_removed()
+    test_sync_failed_processing_does_not_ack_or_remove_message()
     test_login_initialization_calls_auto_sync_after_setup()
     test_auto_sync_receives_offline_prekey_message_without_manual_sync()
     test_manual_sync_command_still_fetches_pending_messages()

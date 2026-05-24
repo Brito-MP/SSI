@@ -357,14 +357,27 @@ def deliver_or_store_message(msg: dict, users: dict):
     return envelope, False, True
 
 
-# Entrega mensagens pendentes de um utilizador e remove-as da fila offline.
-def pop_pending_messages(username: str):
+# Devolve mensagens pendentes de um utilizador sem as remover da fila offline.
+def get_pending_messages(username: str):
     with messages_lock():
         messages = load_messages()
-        pending = [m for m in messages if m["to"] == username]
-        remaining = [m for m in messages if m["to"] != username]
-        save_messages(remaining)
+        pending = [m for m in messages if m.get("to") == username]
     return pending
+
+
+def ack_pending_messages(username: str, message_ids):
+    ack_ids = {message_id for message_id in message_ids if isinstance(message_id, str)}
+    with messages_lock():
+        messages = load_messages()
+        remaining = []
+        removed = 0
+        for msg in messages:
+            if msg.get("to") == username and msg.get("message_id") in ack_ids:
+                removed += 1
+                continue
+            remaining.append(msg)
+        save_messages(remaining)
+    return removed
 
 
 def sender_public_key(users: dict, sender: str):
@@ -718,21 +731,42 @@ def handle_client(conn, addr, security_ctx):
             elif command == "fetch_messages":
                 requested_username = msg.get("username")
 
-                if requested_username != authenticated_username:
-                    send_json(conn, {"status": "error", "message": "username inválido para esta sessão"})
-                    continue
-
                 if requested_username is None:
                     send_json(conn, {"status": "error", "message": "username em falta"})
                     continue
 
-                pending = pop_pending_messages(requested_username)
+                if requested_username != authenticated_username:
+                    send_json(conn, {"status": "error", "message": "username inválido para esta sessão"})
+                    continue
+
+                pending = get_pending_messages(requested_username)
                 users = load_users()
                 pending = enrich_with_sender_keys(pending, users)
 
                 send_json(conn, {
                     "status": "ok",
                     "messages": pending
+                })
+
+            elif command == "ack_messages":
+                requested_username = msg.get("username")
+                if requested_username is None:
+                    send_json(conn, {"status": "error", "message": "username em falta"})
+                    continue
+
+                if requested_username != authenticated_username:
+                    send_json(conn, {"status": "error", "message": "username inválido para esta sessão"})
+                    continue
+
+                message_ids = msg.get("message_ids")
+                if not isinstance(message_ids, list) or not all(isinstance(message_id, str) for message_id in message_ids):
+                    send_json(conn, {"status": "error", "message": "message_ids inválidos"})
+                    continue
+
+                removed_count = ack_pending_messages(requested_username, message_ids)
+                send_json(conn, {
+                    "status": "ok",
+                    "removed_count": removed_count,
                 })
 
             elif command == "list_contacts":
