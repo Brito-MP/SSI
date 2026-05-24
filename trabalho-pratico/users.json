@@ -255,7 +255,7 @@
       "signature": "qkgPxItLpDVM1uQmIYqKgLPXHXiD+uAhi/sEqlNRwHWklAxWZiF39G4McMQ9+THNzvlNFUZzPNFyUh2AmWpQh+AF8oNJv2UmRx0UoS7MWWwRfuFZh0ydXoYLrYpyqQ/X4KDUz0WMuQMBxr7XYqWabUnL2hLqhrzWjUqqHAMY+79H0PWovravzDNQfH6lQDD2bU6k0SycQh6/GMdsNBkscCbPTPF/nlGBcywYfRlHwKN4hiv4CbvYjwWrx4qMpToXORVnnKTez4j3RUlBuNzxtQCDM2lUVFdJYuz58JjsQr+q3IgbAgaLmTBR4DePs9FIv/+j3dRhzKEwnJVggDUB4g=="
     },
     "e2ee_public_key": "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VuAyEAa0/0JbtkoYgJ+Upz22KFM1G/mpB3vCMJii9J+RRwylg=\n-----END PUBLIC KEY-----\n",
-    "e2ee_public_key_signature": "AltEY+qMM/M8XHuYj07jAzQqGyRa/9F0YQq7anKjPmaPtY7C3TXDNaZkcPnHW3R47EvVx3P2CUYqn/twcgot60fjMUwbtluUvuk/sjiQyVIVok6TkX1Q84CKRV+PYxBS2Dte9C99joTqVt8ry93xyK+vcqA1TkiAyF5panhd3mlBd/gAx/vZjsKqVhErROG9ztYPRNnwWLZfh+fMLmxIzkDScW4+yyuYLUILvxwSTfNscc3CYMhkdMNOHLtOBNN1Xd92i4kQAu0OKfgE3SRVVMHJvqkB9FUOnC4vaOLU/aIyUahRFsMEYMOXCG2ZAG/qeXQE0687kcDrr1o1awVTlA==",
+    "e2ee_public_key_signature": "m5+GgemY/hUUl+Gh1npGvK8ANaz9/LMTOm3NEfvUPNDhl4EZ6DmMejvFSOn99DfvbkVoYlQ91CT+fgUKBDTNOd2wSs23BNcWYpnM2tNeKpGzfxT8wwrh9Oxy+7w9KwZVNDrqusnQwI7qu+82uoQV/c03cGSV5k8nPwgiRkgZQH+lvC/5xRr2t+qzq5fN+jyhWzBN/np29YAbd6mrUCTDHU0iKAJ68c5oIszyK2ZZ0wDJ2IMBFKK1R42VThyZ0txSsGQLbZwCXz/k0R4nvBnXOpcVLoMaKREdd9PWpUh9ee6ddE4BSPzyKL6FZ01OG7m/FZLWmBrvcb70e8QCR4QYYA==",
     "signed_prekeys": {
       "8a06e596-c4dd-479a-b9c0-e2ad383494cf": {
         "type": "signed_prekey",
