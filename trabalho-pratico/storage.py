@@ -25,7 +25,6 @@ def messages_lock():
         yield
 
 
-# Lê um ficheiro JSON e devolve um valor por omissão caso ainda não exista.
 def _load_json(path, default):
     if not os.path.exists(path):
         return default
@@ -33,7 +32,6 @@ def _load_json(path, default):
         return json.load(f)
 
 
-# Guarda JSON de forma atómica para reduzir o risco de corromper o ficheiro.
 def _save_json(path, data):
     directory = os.path.dirname(path)
     os.makedirs(directory, exist_ok=True)
@@ -79,8 +77,6 @@ def load_messages():
         return _load_json(MESSAGES_FILE, [])
 
 
-# O servidor guarda apenas envelopes cifrados e metadados.
-# Não deve guardar qualquer chave privada nem chaves simétricas em claro.
 def save_messages(messages):
     with _MESSAGES_LOCK:
         _save_json(MESSAGES_FILE, messages)

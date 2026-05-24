@@ -11,9 +11,6 @@ if str(ROOT_DIR) not in sys.path:
 
 from client_connection import send_request
 from crypto_utils import (
-    SIGNED_PREKEY_ALGORITHM,
-    SIGNED_PREKEY_TYPE,
-    SIGNED_PREKEY_VERSION,
     generate_signed_prekey,
     private_key_to_pem,
     utc_timestamp,
@@ -64,18 +61,6 @@ def load_local_prekeys(state):
 
 def save_local_prekeys(state, prekeys):
     _write_json_file(prekeys_path(state), prekeys)
-
-
-def public_prekey_from_entry(prekey_id, entry):
-    return {
-        "type": SIGNED_PREKEY_TYPE,
-        "version": SIGNED_PREKEY_VERSION,
-        "prekey_id": prekey_id,
-        "algorithm": SIGNED_PREKEY_ALGORITHM,
-        "public_key": entry["public_key"],
-        "signature": entry["signature"],
-        "created_at": entry["created_at"],
-    }
 
 
 def generate_and_store_signed_prekeys(state, count=10):

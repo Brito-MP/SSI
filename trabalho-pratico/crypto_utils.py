@@ -94,8 +94,6 @@ def generate_x25519_keypair():
     return private_key, public_key
 
 
-# Guarda a chave privada no disco local do cliente.
-# O servidor nunca deve ter acesso a este ficheiro.
 def save_private_key(private_key, path: str):
     pem = private_key_to_pem(private_key).encode()
     with open(path, "wb") as f:
@@ -110,7 +108,6 @@ def private_key_to_pem(private_key) -> str:
     ).decode()
 
 
-# Guarda a chave pública para que o utilizador a possa publicar no servidor.
 def save_public_key(public_key, path: str):
     pem = public_key.public_bytes(
         encoding=serialization.Encoding.PEM,
@@ -120,19 +117,16 @@ def save_public_key(public_key, path: str):
         f.write(pem)
 
 
-# Lê a chave privada local do utilizador.
 def load_private_key(path: str):
     with open(path, "rb") as f:
         return serialization.load_pem_private_key(f.read(), password=None)
 
 
-# Lê uma chave pública guardada em PEM.
 def load_public_key(path: str):
     with open(path, "rb") as f:
         return serialization.load_pem_public_key(f.read())
 
 
-# Converte a chave pública para texto PEM para a enviar pelo protocolo.
 def public_key_to_pem(public_key) -> str:
     return public_key.public_bytes(
         encoding=serialization.Encoding.PEM,
@@ -140,7 +134,6 @@ def public_key_to_pem(public_key) -> str:
     ).decode()
 
 
-# Reconstrói uma chave pública a partir de texto PEM.
 def public_key_from_pem(pem: str):
     return serialization.load_pem_public_key(pem.encode())
 
@@ -228,10 +221,6 @@ def build_session_handshake_signing_data(msg: dict) -> bytes:
     })
 
 
-def sign_session_ephemeral(msg: dict, identity_private_key) -> str:
-    return sign_message(build_session_handshake_signing_data(msg), identity_private_key)
-
-
 def verify_session_ephemeral_signature(msg: dict, identity_public_key) -> bool:
     required = ["type", "session_id", "from", "to", "ephemeral_public_key", "timestamp", "signature"]
     if not isinstance(msg, dict) or not all(isinstance(msg.get(field), str) and msg.get(field) for field in required):
@@ -296,9 +285,6 @@ def verify_signed_prekey(username: str, identity_public_key, prekey: dict) -> bo
     return verify_signature(signing_data, prekey["signature"], identity_public_key)
 
 
-# Cifra uma mensagem para um destinatário específico.
-# Gera uma chave AES aleatória para esta mensagem, cifra o texto com AES-GCM
-# e encapsula a chave AES com a chave pública RSA do destinatário.
 def encrypt_for_recipient(plaintext: str, recipient_public_key, aad: bytes | None = None):
     aes_key = AESGCM.generate_key(bit_length=256)
     aesgcm = AESGCM(aes_key)
@@ -389,7 +375,6 @@ def encrypt_for_signed_prekey(
     }
 
 
-# Decifra uma mensagem recebida por este utilizador.
 def decrypt_from_sender_v1(payload: dict, recipient_private_key, aad: bytes | None = None) -> str:
     encrypted_key = base64.b64decode(payload["encrypted_key"])
     nonce = base64.b64decode(payload["nonce"])
@@ -427,7 +412,6 @@ def decrypt_from_sender_v2(payload: dict, recipient_x25519_private_key, aad: byt
     return plaintext.decode()
 
 
-# Decifra uma mensagem recebida por este utilizador.
 def decrypt_from_sender(payload: dict, recipient_private_key, recipient_x25519_private_key=None, aad: bytes | None = None) -> str:
     if payload.get("version") == E2EE_MESSAGE_VERSION:
         return decrypt_from_sender_v2(payload, recipient_x25519_private_key, aad)
@@ -586,7 +570,6 @@ def online_session_message_signed_part(msg: dict):
     }
 
 
-# Assina dados com a chave privada do remetente.
 def sign_message(data: bytes, private_key) -> str:
     signature = private_key.sign(
         data,
@@ -599,7 +582,6 @@ def sign_message(data: bytes, private_key) -> str:
     return base64.b64encode(signature).decode()
 
 
-# Verifica a assinatura de um remetente.
 def verify_signature(data: bytes, signature_b64: str, public_key) -> bool:
     try:
         signature = base64.b64decode(signature_b64)
@@ -617,7 +599,6 @@ def verify_signature(data: bytes, signature_b64: str, public_key) -> bool:
         return False
 
 
-# Serializa um dicionário sempre da mesma maneira antes de assinar/verificar.
 def canonical_message_bytes(message_dict: dict) -> bytes:
     return json.dumps(message_dict, sort_keys=True, separators=(",", ":")).encode()
 
@@ -805,11 +786,9 @@ def unprotect_groups(protected_groups: dict, owner: str, private_key, public_key
     return normalize_groups(group_data.get("groups", {}))
 
 
-# Gera um identificador único para cada mensagem.
 def generate_message_id() -> str:
     return str(uuid.uuid4())
 
 
-# Cria um timestamp UTC em formato ISO 8601.
 def utc_timestamp() -> str:
     return datetime.now(timezone.utc).isoformat()

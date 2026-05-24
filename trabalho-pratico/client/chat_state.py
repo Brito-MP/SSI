@@ -93,24 +93,6 @@ class ChatState:
             self.seen_message_ids.add(message_id)
             return True
 
-    def rebuild_seen_message_ids_from_history(self):
-        message_ids = set()
-        with self.conversations_lock:
-            for messages in self.conversations.values():
-                if not isinstance(messages, list):
-                    continue
-                for message in messages:
-                    if not isinstance(message, dict):
-                        continue
-                    message_id = message.get("message_id")
-                    if isinstance(message_id, str) and message_id:
-                        message_ids.add(message_id)
-
-        with self.seen_message_ids_lock:
-            self.seen_message_ids.update(message_ids)
-
-        return len(message_ids)
-
     @classmethod
     def create(cls, username: str):
         private_key, public_key = ensure_keys(username)

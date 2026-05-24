@@ -182,7 +182,6 @@ def is_valid_online_session_message(msg: dict) -> bool:
     return is_valid_group_payload(msg.get("payload"))
 
 
-# Verifica se a estrutura da mensagem recebida tem o formato esperado.
 def is_valid_envelope(msg: dict) -> bool:
     if any(field in msg for field in FORBIDDEN_PLAINTEXT_GROUP_FIELDS):
         return False
@@ -233,8 +232,6 @@ def is_valid_envelope(msg: dict) -> bool:
     return True
 
 
-# Guarda uma mensagem offline para o destinatário.
-# O conteúdo já vem cifrado do cliente; o servidor só persiste e encaminha.
 def build_envelope(msg: dict):
     if msg.get("type") in {SESSION_INIT_TYPE, SESSION_RESPONSE_TYPE}:
         return {
@@ -357,7 +354,6 @@ def deliver_or_store_message(msg: dict, users: dict):
     return envelope, False, True
 
 
-# Devolve mensagens pendentes de um utilizador sem as remover da fila offline.
 def get_pending_messages(username: str):
     with messages_lock():
         messages = load_messages()
