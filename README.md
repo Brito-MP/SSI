@@ -1,13 +1,278 @@
-# Repositório SSI 25/26
+# SSI — Secure Communication System
 
-- A106811 - Gonçalo Francisco Loureiro Silva
-- A107378 - Henrique Moura Palma Brito
-- A107321 - José Simão Correia de Campos
+Repository developed for the **SSI** course of the **Software Engineering (Engenharia Informática)** degree at the **University of Minho**, during the **2nd semester of the 3rd year**.
 
-### Guiões Práticos
+The repository contains the practical laboratory work completed throughout the semester and a final project focused on the design and implementation of a **secure end-to-end encrypted messaging system**.
 
-Estes devem ser colocados na diretoria `guioes`, dentro da semana correspondente (`S3`, `S4`, etc.).
+## Practical Project
 
-### Trabalho Prático
+The main project is a secure chat application written in **Python**, based on a client-server architecture.
 
-Este deverá ser depositado dentro da diretoria `trabalho-pratico`.
+The server coordinates connections, user registration, message routing and offline message storage, while the actual message contents remain protected with **End-to-End Encryption (E2EE)**.
+
+The security model assumes an **honest-but-curious server**: the server performs its required operations correctly, but should not be trusted with the plaintext contents of users' communications.
+
+## Main Features
+
+* Secure client-server communication over TCP;
+* Authenticated handshake using **X.509 certificates**;
+* End-to-End Encryption for private messages;
+* Offline encrypted messaging;
+* Signed prekeys for asynchronous communication;
+* Ephemeral online sessions;
+* Secure group conversations;
+* Group key rotation when membership changes;
+* Encrypted contact and group state;
+* Import/export of public identity bundles;
+* PGP-like encrypted message exchange through files;
+* Persistent storage of encrypted pending messages;
+* Automated security and integrity tests.
+
+## Cryptography
+
+The project combines several cryptographic mechanisms:
+
+| Mechanism              | Purpose                           |
+| ---------------------- | --------------------------------- |
+| **X.509 Certificates** | User and server authentication    |
+| **RSA-PSS**            | Digital signatures                |
+| **X25519**             | Key agreement                     |
+| **HKDF-SHA256**        | Session key derivation            |
+| **AES-GCM**            | Authenticated encryption          |
+| **Signed Prekeys**     | Secure offline messaging          |
+| **Group Keys**         | Encryption of group conversations |
+
+Private keys and plaintext group/session keys remain on the client side. The server only stores public cryptographic material, protected state or encrypted message envelopes.
+
+## Architecture
+
+```text
+                     Local Certificate Authority
+                               │
+                 ┌─────────────┴─────────────┐
+                 │                           │
+              Client A                   Client B
+                 │                           │
+                 │   Authenticated TCP       │
+                 │        Channel            │
+                 └───────────┬───────────────┘
+                             │
+                          Server
+                             │
+                 Routing / Offline Storage
+                             │
+                    Encrypted Data Only
+```
+
+The implementation is divided into several modules:
+
+```text
+trabalho-pratico/
+├── client/       # CLI, client state and command handlers
+├── server/       # Connections, routing and storage
+├── common/       # Certificates and secure transport channel
+├── crypto/       # E2EE and cryptographic protocols
+├── certs/        # Local PKI certificates
+├── keys/         # Development/test user key material
+├── tests/        # Automated security tests
+├── tools/        # Certificate utilities
+├── protocol.py
+├── storage.py
+└── test_security.py
+```
+
+## Authenticated Handshake
+
+Before normal communication begins, the client and server establish an authenticated secure channel.
+
+The handshake uses:
+
+1. X.509 certificates for identity validation;
+2. Ephemeral X25519 keys for key agreement;
+3. RSA signatures to authenticate the exchanged ephemeral keys;
+4. HKDF-SHA256 to derive a shared 256-bit session key;
+5. AES-GCM to protect subsequent client-server frames.
+
+This transport layer protects the connection from interception and manipulation while E2EE independently protects message contents from the server itself.
+
+## Private Messaging
+
+Private messages are encrypted on the sender's device before being sent to the server.
+
+The server only receives an encrypted envelope and forwards it to the destination.
+
+The application supports both standard E2EE messaging and ephemeral online sessions when both users are connected.
+
+## Offline Messaging
+
+When the recipient is offline, encrypted messages are stored by the server in:
+
+```text
+messages.json
+```
+
+Signed prekeys allow a sender to establish cryptographic material for an offline recipient without requiring them to be connected at that moment.
+
+Pending messages are synchronized when the recipient logs in and are only removed after successful processing and acknowledgement.
+
+## Group Messaging
+
+Groups use a shared symmetric **group key**.
+
+When a group is created:
+
+1. A group key is generated by the creator;
+2. The key is individually distributed to members using E2EE;
+3. Group messages are encrypted using AES-GCM.
+
+When a user leaves or is removed, the group key is rotated and redistributed only to the remaining members.
+
+## Running the Project
+
+### Requirements
+
+* Python 3
+* `cryptography`
+
+Install the required dependency:
+
+```bash
+pip install cryptography
+```
+
+### Start the Server
+
+From the `trabalho-pratico` directory:
+
+```bash
+python3 server/server.py
+```
+
+By default, the server listens on:
+
+```text
+127.0.0.1:9000
+```
+
+### Start a Client
+
+In another terminal:
+
+```bash
+python3 client/client_start.py
+```
+
+Multiple clients can be opened simultaneously in separate terminals.
+
+> The certificates and keys included in this repository are intended exclusively for academic development and testing and should not be reused in a production system.
+
+## Tests
+
+Run the automated security tests with:
+
+```bash
+cd trabalho-pratico
+python3 test_security.py
+```
+
+The test suite covers:
+
+* AES-GCM encryption and tamper detection;
+* E2EE messages;
+* Digital signatures;
+* Certificate validation;
+* Signed prekeys;
+* Offline delivery;
+* Ephemeral online sessions;
+* Group messaging;
+* Group-key rotation;
+* Protected contacts and group state;
+* Bundle import/export;
+* File-based encrypted messaging;
+* Concurrent access to persistent storage.
+
+## Practical Labs
+
+The `guioes/` directory contains the practical exercises completed during the semester.
+
+Topics explored include:
+
+* Linux and system security;
+* File descriptors and privilege-related vulnerabilities;
+* Classical cryptography;
+* Caesar and Vigenère ciphers;
+* One-Time Pad;
+* AES-CBC and AES-CTR;
+* ChaCha20;
+* Message Authentication Codes;
+* HMAC;
+* Authenticated encryption with AES-GCM;
+* Integrity attacks;
+* Memory-safety vulnerabilities;
+* Buffer overflows and format-string vulnerabilities.
+
+## Repository Structure
+
+```text
+SSI/
+├── guioes/
+│   ├── S3/
+│   ├── S4/
+│   ├── S5/
+│   ├── S6/
+│   ├── S7/
+│   └── S11/
+│
+├── trabalho-pratico/
+│   ├── certs/
+│   ├── client/
+│   ├── common/
+│   ├── crypto/
+│   ├── images/
+│   ├── keys/
+│   ├── server/
+│   ├── tests/
+│   ├── tools/
+│   ├── README.md
+│   └── test_security.py
+│
+└── README.md
+```
+
+## Security Model
+
+The system was designed to provide:
+
+* **Confidentiality** — message contents are encrypted before leaving the client;
+* **Integrity** — authenticated encryption detects modifications;
+* **Authenticity** — certificates and digital signatures bind users to cryptographic identities;
+* **MitM protection** — ephemeral keys exchanged during the handshake are authenticated;
+* **Offline confidentiality** — pending messages remain encrypted while stored by the server;
+* **Group forward confidentiality** — removed members do not receive newly rotated group keys.
+
+## Technologies
+
+* **Python**
+* **TCP Sockets**
+* **Multithreading**
+* **Cryptography**
+* **X.509 / PKI**
+* **RSA**
+* **X25519**
+* **HKDF-SHA256**
+* **AES-GCM**
+* **JSON**
+
+## Authors
+
+* **Gonçalo Francisco Loureiro Silva** — A106811
+* **Henrique Moura Palma Brito** — A107378
+* **José Simão Correia de Campos** — A107321
+
+## Academic Context
+
+**University of Minho**
+Bachelor's Degree in **Software Engineering (Engenharia Informática)**
+Course: **SSI**
+Academic Year: **2025/2026**
+**3rd Year — 2nd Semester**
