@@ -262,17 +262,3 @@ The system was designed to provide:
 * **HKDF-SHA256**
 * **AES-GCM**
 * **JSON**
-
-## Authors
-
-* **Gonçalo Francisco Loureiro Silva** — A106811
-* **Henrique Moura Palma Brito** — A107378
-* **José Simão Correia de Campos** — A107321
-
-## Academic Context
-
-**University of Minho**
-Bachelor's Degree in **Software Engineering (Engenharia Informática)**
-Course: **SSI**
-Academic Year: **2025/2026**
-**3rd Year — 2nd Semester**
